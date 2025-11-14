@@ -5,9 +5,11 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import timber.log.Timber
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,53 +43,35 @@ class PreferencesDataSource @Inject constructor(
         Pair(lat, lon)
     }
 
-    val unsplashApiKey: Flow<String> = dataStore.data.map { preferences ->
-        preferences[UNSPLASH_API_KEY] ?: ""
-    }
-
-    val weatherApiKey: Flow<String> = dataStore.data.map { preferences ->
-        preferences[WEATHER_API_KEY] ?: ""
-    }
-
     suspend fun setBackgroundInterval(seconds: Int) {
-        Timber.d("Setting background interval: $seconds seconds")
-        dataStore.edit { preferences ->
-            preferences[BACKGROUND_INTERVAL_KEY] = seconds
+        withContext(Dispatchers.IO) {
+            Timber.d("Setting background interval: $seconds seconds")
+            dataStore.edit { preferences ->
+                preferences[BACKGROUND_INTERVAL_KEY] = seconds
+            }
+            Timber.d("Background interval saved: $seconds seconds")
         }
-        Timber.d("Background interval saved: $seconds seconds")
     }
 
     suspend fun setCityName(city: String) {
-        Timber.d("Setting city name: $city")
-        dataStore.edit { preferences ->
-            preferences[CITY_NAME_KEY] = city
+        withContext(Dispatchers.IO) {
+            Timber.d("Setting city name: $city")
+            dataStore.edit { preferences ->
+                preferences[CITY_NAME_KEY] = city
+            }
+            Timber.d("City name saved: $city")
         }
-        Timber.d("City name saved: $city")
     }
 
     suspend fun setLocation(latitude: Double, longitude: Double) {
-        Timber.d("Setting location: lat=$latitude, lon=$longitude")
-        dataStore.edit { preferences ->
-            preferences[LATITUDE_KEY] = latitude.toString()
-            preferences[LONGITUDE_KEY] = longitude.toString()
+        withContext(Dispatchers.IO) {
+            Timber.d("Setting location: lat=$latitude, lon=$longitude")
+            dataStore.edit { preferences ->
+                preferences[LATITUDE_KEY] = latitude.toString()
+                preferences[LONGITUDE_KEY] = longitude.toString()
+            }
+            Timber.d("Location saved: lat=$latitude, lon=$longitude")
         }
-        Timber.d("Location saved: lat=$latitude, lon=$longitude")
-    }
-
-    suspend fun setUnsplashApiKey(apiKey: String) {
-        Timber.d("Setting Unsplash API key: ${if (apiKey.isNotBlank()) "***${apiKey.takeLast(4)}" else "empty"}")
-        dataStore.edit { preferences ->
-            preferences[UNSPLASH_API_KEY] = apiKey
-        }
-        Timber.d("Unsplash API key saved")
-    }
-
-    suspend fun setWeatherApiKey(apiKey: String) {
-        Timber.d("Setting Weather API key: ${if (apiKey.isNotBlank()) "***${apiKey.takeLast(4)}" else "empty"}")
-        dataStore.edit { preferences ->
-            preferences[WEATHER_API_KEY] = apiKey
-        }
-        Timber.d("Weather API key saved")
     }
 }
 

@@ -7,7 +7,6 @@ import com.github.iscle.haven.domain.model.Weather
 import com.github.iscle.haven.domain.usecase.GetBackgroundIntervalUseCase
 import com.github.iscle.haven.domain.usecase.GetCityNameUseCase
 import com.github.iscle.haven.domain.usecase.GetRandomBackgroundImageUseCase
-import com.github.iscle.haven.domain.usecase.GetWeatherApiKeyUseCase
 import com.github.iscle.haven.domain.usecase.GetWeatherUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import timber.log.Timber
@@ -34,36 +33,36 @@ class HomeViewModel @Inject constructor(
     private val getRandomBackgroundImageUseCase: GetRandomBackgroundImageUseCase,
     private val getWeatherUseCase: GetWeatherUseCase,
     private val getBackgroundIntervalUseCase: GetBackgroundIntervalUseCase,
-    private val getCityNameUseCase: GetCityNameUseCase,
-    private val getWeatherApiKeyUseCase: GetWeatherApiKeyUseCase
+    private val getCityNameUseCase: GetCityNameUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private var backgroundJob: Job? = null
+    private var weatherJob: Job? = null
     private var currentIntervalSeconds = 10
-    private var weatherApiKey = ""
+    private val weatherRefreshIntervalSeconds = 600L // 10 minutes
+    private var currentCity: String = ""
 
     init {
         Timber.d("HomeViewModel: Initializing")
-        observeWeatherApiKey()
-        loadWeather()
+        observeCityName()
         loadBackgroundImage()
         observeBackgroundInterval()
+        startWeatherRefresh()
     }
 
-    private fun observeWeatherApiKey() {
+    private fun observeCityName() {
         viewModelScope.launch {
-            Timber.d("HomeViewModel: Observing weather API key")
-            getWeatherApiKeyUseCase().collect { apiKey ->
-                val wasEmpty = weatherApiKey.isBlank()
-                weatherApiKey = apiKey
-                if (wasEmpty && apiKey.isNotBlank()) {
-                    Timber.i("HomeViewModel: Weather API key set, reloading weather")
-                    loadWeather()
-                } else if (apiKey.isBlank()) {
-                    Timber.w("HomeViewModel: Weather API key is empty")
+            Timber.d("HomeViewModel: Observing city name")
+            getCityNameUseCase().collect { city ->
+                if (city != currentCity) {
+                    Timber.i("HomeViewModel: City name changed: $currentCity -> $city")
+                    currentCity = city
+                    if (city.isNotBlank()) {
+                        loadWeatherForCity(city)
+                    }
                 }
             }
         }
@@ -90,6 +89,20 @@ class HomeViewModel @Inject constructor(
                 delay(currentIntervalSeconds * 1000L)
                 Timber.d("HomeViewModel: Background rotation timer triggered, loading new image")
                 loadBackgroundImage()
+            }
+        }
+    }
+
+    private fun startWeatherRefresh() {
+        weatherJob?.cancel()
+        Timber.d("HomeViewModel: Starting weather refresh with interval: ${weatherRefreshIntervalSeconds}s")
+        weatherJob = viewModelScope.launch {
+            while (true) {
+                delay(weatherRefreshIntervalSeconds * 1000L)
+                Timber.d("HomeViewModel: Weather refresh timer triggered, loading new weather")
+                if (currentCity.isNotBlank()) {
+                    loadWeatherForCity(currentCity)
+                }
             }
         }
     }
@@ -127,58 +140,57 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun loadWeather() {
+    private fun loadWeatherForCity(city: String) {
         viewModelScope.launch {
-            Timber.d("HomeViewModel: Loading weather")
-            combine(
-                getCityNameUseCase(),
-                getWeatherApiKeyUseCase()
-            ) { city, apiKey ->
-                Pair(city, apiKey)
-            }.collect { (city, apiKey) ->
-                if (apiKey.isBlank()) {
-                    Timber.w("HomeViewModel: Cannot load weather - API key is empty")
+            if (city.isBlank()) {
+                Timber.w("HomeViewModel: Cannot load weather - city name is empty")
+                _uiState.update {
+                    it.copy(
+                        isLoadingWeather = false,
+                        errorMessage = "City name is not set"
+                    )
+                }
+                return@launch
+            }
+            
+            Timber.d("HomeViewModel: Loading weather for city: $city")
+            _uiState.update { it.copy(isLoadingWeather = true) }
+            
+            getWeatherUseCase(city).fold(
+                onSuccess = { weather ->
+                    Timber.i("HomeViewModel: Weather loaded successfully: city=${weather.cityName}, temp=${weather.temperature}°C")
+                    _uiState.update {
+                        it.copy(
+                            weather = weather,
+                            isLoadingWeather = false,
+                            errorMessage = null
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    Timber.e(error, "HomeViewModel: Failed to load weather for city: $city")
                     _uiState.update {
                         it.copy(
                             isLoadingWeather = false,
-                            errorMessage = "Weather API key is not set"
+                            errorMessage = "Failed to load weather: ${error.message}"
                         )
                     }
-                    return@collect
                 }
-                
-                Timber.d("HomeViewModel: Loading weather for city: $city")
-                _uiState.update { it.copy(isLoadingWeather = true) }
-                
-                getWeatherUseCase(apiKey, city).fold(
-                    onSuccess = { weather ->
-                        Timber.i("HomeViewModel: Weather loaded successfully: city=${weather.cityName}, temp=${weather.temperature}°C")
-                        _uiState.update {
-                            it.copy(
-                                weather = weather,
-                                isLoadingWeather = false,
-                                errorMessage = null
-                            )
-                        }
-                    },
-                    onFailure = { error ->
-                        Timber.e(error, "HomeViewModel: Failed to load weather for city: $city")
-                        _uiState.update {
-                            it.copy(
-                                isLoadingWeather = false,
-                                errorMessage = "Failed to load weather: ${error.message}"
-                            )
-                        }
-                    }
-                )
-            }
+            )
+        }
+    }
+
+    fun loadWeather() {
+        if (currentCity.isNotBlank()) {
+            loadWeatherForCity(currentCity)
         }
     }
 
     override fun onCleared() {
-        Timber.d("HomeViewModel: Clearing ViewModel, cancelling background job")
+        Timber.d("HomeViewModel: Clearing ViewModel, cancelling background and weather jobs")
         super.onCleared()
         backgroundJob?.cancel()
+        weatherJob?.cancel()
     }
 }
 

@@ -1,6 +1,6 @@
 package com.github.iscle.haven.domain.usecase
 
-import com.github.iscle.haven.data.repository.PreferencesRepository
+import com.github.iscle.haven.domain.repository.PreferencesRepository
 import timber.log.Timber
 import javax.inject.Inject
 

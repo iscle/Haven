@@ -8,6 +8,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.github.iscle.haven.ui.theme.RajdhaniFontFamily
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.ImageLoader
 import coil.compose.AsyncImage
@@ -49,13 +53,17 @@ import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.LocalImageLoader
+import coil.imageLoader
+import coil.request.CachePolicy
+import coil.request.SuccessResult
+import com.github.iscle.haven.domain.model.BackgroundImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.time.Instant
 import java.time.LocalDateTime
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 // Text shadow style for better readability over backgrounds
 private val textShadow = Shadow(
@@ -67,13 +75,15 @@ private val textShadow = Shadow(
 @Composable
 fun HomeScreen(
     onNavigateToSettings: () -> Unit,
+    onNavigateToHistory: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val imageLoader = LocalImageLoader.current
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
     val uiState by viewModel.uiState.collectAsState()
     
     // Track the displayed image (only updates when new image is fully loaded)
-    var displayedImage by remember { mutableStateOf<com.github.iscle.haven.domain.model.BackgroundImage?>(null) }
+    var displayedImage by remember { mutableStateOf<BackgroundImage?>(null) }
     val newImage = uiState.backgroundImage
     
     // Initialize displayedImage on first load
@@ -90,24 +100,20 @@ fun HomeScreen(
     ) {
         // Preload the new image in the background (invisible) and track when it's loaded
         // Only preload if it's different from the currently displayed image
-        newImage?.let { image ->
-            if (image.url != displayedImage?.url) {
-                SubcomposeAsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(image.url)
-                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .networkCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .build(),
-                    imageLoader = imageLoader,
-                    contentDescription = null,
-                    modifier = Modifier.size(1.dp).offset(x = (-1000).dp, y = (-1000).dp), // Invisible preload (off-screen)
-                    contentScale = ContentScale.Crop,
-                    onSuccess = { state: AsyncImagePainter.State.Success ->
-                        // When image is successfully loaded, update displayedImage to trigger animation
-                        displayedImage = image
-                    }
-                )
+        LaunchedEffect(newImage?.url) {
+            if (newImage != null && newImage.url != displayedImage?.url) {
+                val request = ImageRequest.Builder(context)
+                    .data(newImage.url)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .networkCachePolicy(CachePolicy.ENABLED)
+                    .build()
+
+                val result = imageLoader.execute(request)
+
+                if (result is SuccessResult) {
+                    displayedImage = newImage
+                }
             }
         }
         
@@ -171,32 +177,61 @@ fun HomeScreen(
                 .align(Alignment.Center)
         )
 
-        // Settings button at top right with shadow effect
-        Box(
+        // Settings and History buttons at top right with shadow effect
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(32.dp)
+                .padding(32.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Shadow layer
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = null,
-                tint = Color.Black.copy(alpha = 0.5f),
-                modifier = Modifier
-                    .size(32.dp)
-                    .offset(x = 2.dp, y = 2.dp)
-            )
-            // Main icon
-            IconButton(
-                onClick = onNavigateToSettings,
-                modifier = Modifier.size(32.dp)
-            ) {
+            // History button
+            Box {
+                // Shadow layer
+                Icon(
+                    imageVector = Icons.Default.Collections,
+                    contentDescription = null,
+                    tint = Color.Black.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .offset(x = 2.dp, y = 2.dp)
+                )
+                // Main icon
+                IconButton(
+                    onClick = onNavigateToHistory,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Collections,
+                        contentDescription = "Wallpaper History",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+            
+            // Settings button
+            Box {
+                // Shadow layer
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                    contentDescription = null,
+                    tint = Color.Black.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .offset(x = 2.dp, y = 2.dp)
                 )
+                // Main icon
+                IconButton(
+                    onClick = onNavigateToSettings,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
 
@@ -274,12 +309,23 @@ fun WeatherWidget(
     }
 }
 
-@OptIn(ExperimentalTime::class)
 @Composable
 fun ClockWidget(
     modifier: Modifier = Modifier
 ) {
-    val calendar = Calendar.getInstance()
+    var calendar by remember { mutableStateOf(Calendar.getInstance()) }
+    
+    // Update time every minute
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            val now = System.currentTimeMillis()
+            val nextMinute = ((now / 60000) + 1) * 60000
+            val delay = nextMinute - now
+            delay(delay)
+            calendar = Calendar.getInstance()
+        }
+    }
+    
     val hour = calendar.get(Calendar.HOUR_OF_DAY)
     val minute = calendar.get(Calendar.MINUTE)
     val dayOfWeekName = calendar.getDisplayName(
@@ -298,7 +344,7 @@ fun ClockWidget(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Time with shadow (custom font will be applied when downloaded)
+        // Time with shadow
         Text(
             text = String.format(
                 Locale.getDefault(),
@@ -306,13 +352,13 @@ fun ClockWidget(
                 hour, minute
             ),
             fontSize = 120.sp,
-            fontWeight = FontWeight.Light,
-            fontFamily = FontFamily.Default, // TODO: Replace with custom font (Rajdhani recommended)
+            fontWeight = FontWeight.Bold,
+            fontFamily = RajdhaniFontFamily,
             color = Color.White,
             style = TextStyle(shadow = textShadow)
         )
         
-        // Date with shadow (custom font will be applied when downloaded)
+        // Date with shadow
         val dayOfWeek = dayOfWeekName.lowercase().replaceFirstChar { it.uppercase() }
         val month = monthName.lowercase().replaceFirstChar { it.uppercase() }
         val dateText = "$dayOfWeek, $month $dayOfMonth"
@@ -321,15 +367,10 @@ fun ClockWidget(
             text = dateText,
             fontSize = 32.sp,
             fontWeight = FontWeight.Normal,
-            fontFamily = FontFamily.Default, // TODO: Replace with custom font (Rajdhani recommended)
+            fontFamily = RajdhaniFontFamily,
             color = Color.White.copy(alpha = 0.95f),
             style = TextStyle(shadow = textShadow)
         )
-    }
-    
-    // Update every minute
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(60000)
     }
 }
 

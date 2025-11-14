@@ -25,6 +25,10 @@ annotation class UnsplashClient
 @Retention(AnnotationRetention.BINARY)
 annotation class WeatherClient
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class GeocodingClient
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
@@ -68,7 +72,25 @@ object NetworkModule {
                 level = LogLevel.INFO
             }
             defaultRequest {
-                url("https://api.openweathermap.org/data/2.5/")
+                url("https://api.open-meteo.com/v1/")
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
+    @GeocodingClient
+    fun provideGeocodingHttpClient(json: Json): HttpClient {
+        return HttpClient(Android) {
+            install(ContentNegotiation) {
+                json(json)
+            }
+            install(Logging) {
+                logger = Logger.DEFAULT
+                level = LogLevel.INFO
+            }
+            defaultRequest {
+                url("https://geocoding-api.open-meteo.com/v1/")
             }
         }
     }

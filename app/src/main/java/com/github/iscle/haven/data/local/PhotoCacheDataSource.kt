@@ -1,178 +1,135 @@
 package com.github.iscle.haven.data.local
 
-import android.content.Context
-import com.github.iscle.haven.data.remote.model.UnsplashPhoto
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import com.github.iscle.haven.data.local.database.dao.PhotoCacheDao
+import com.github.iscle.haven.data.local.database.entity.CacheMetadataEntity
+import com.github.iscle.haven.data.local.database.entity.PhotoCacheEntity
+import com.github.iscle.haven.data.local.database.entity.ShownPhotoEntity
+import com.github.iscle.haven.domain.model.BackgroundImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.io.File
-import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Serializable
-private data class PhotoCacheEntry(
-    val photos: List<UnsplashPhoto>,
-    val cachedAt: Long,
-    val query: String,
-    val shownPhotoIds: Set<String> = emptySet()
-)
-
 @Singleton
 class PhotoCacheDataSource @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val json: Json
+    private val photoCacheDao: PhotoCacheDao
 ) {
     companion object {
-        private const val CACHE_DIR = "photo_cache"
         private const val CACHE_EXPIRY_HOURS = 24L
-    }
-
-    private val cacheDir: File by lazy {
-        File(context.cacheDir, CACHE_DIR).apply {
-            if (!exists()) {
-                mkdirs()
-            }
-        }
-    }
-
-    // In-memory cache: query -> (photos, shownIds)
-    private val inMemoryCache = mutableMapOf<String, Pair<List<UnsplashPhoto>, MutableSet<String>>>()
-
-    init {
-        loadCacheFromDisk()
     }
 
     /**
      * Get a random cached photo that hasn't been shown yet
-     * Returns null if no photos available or all have been shown
+     * Returns null if no photos available
+     * Removes photos from cache after they're shown (favorites are handled separately)
      */
-    suspend fun getRandomCachedPhoto(query: String): UnsplashPhoto? {
-        val cacheKey = query.lowercase().trim()
-        
-        // Check in-memory cache first
-        val cached = inMemoryCache[cacheKey]
-        if (cached != null) {
-            val (photos, shownIds) = cached
-            val unshownPhotos = photos.filter { it.id !in shownIds }
+    suspend fun getRandomCachedPhoto(query: String): BackgroundImage? {
+        return withContext(Dispatchers.IO) {
+            val cacheKey = query.lowercase().trim()
             
-            if (unshownPhotos.isNotEmpty()) {
-                val randomPhoto = unshownPhotos.random()
-                shownIds.add(randomPhoto.id)
-                Timber.d("Photo cache hit (memory): query=$query, id=${randomPhoto.id}, remaining=${unshownPhotos.size - 1}")
-                saveCacheToDisk(cacheKey, photos, shownIds)
-                return randomPhoto
-            } else {
-                // All photos shown, reset and start over
-                Timber.d("All cached photos shown for query=$query, resetting rotation")
-                shownIds.clear()
-                if (photos.isNotEmpty()) {
-                    val randomPhoto = photos.random()
-                    shownIds.add(randomPhoto.id)
-                    saveCacheToDisk(cacheKey, photos, shownIds)
-                    return randomPhoto
-                }
-            }
-        }
-
-        // Check disk cache
-        val file = File(cacheDir, "$cacheKey.json")
-        if (file.exists()) {
-            try {
-                val cacheEntry = json.decodeFromString<PhotoCacheEntry>(file.readText())
-                if (!isExpired(cacheEntry.cachedAt)) {
-                    val photos = cacheEntry.photos
-                    val shownIds = cacheEntry.shownPhotoIds.toMutableSet()
-                    val unshownPhotos = photos.filter { it.id !in shownIds }
-                    
-                    if (unshownPhotos.isNotEmpty()) {
-                        val randomPhoto = unshownPhotos.random()
-                        shownIds.add(randomPhoto.id)
-                        Timber.d("Photo cache hit (disk): query=$query, id=${randomPhoto.id}, remaining=${unshownPhotos.size - 1}")
-                        // Update in-memory cache
-                        inMemoryCache[cacheKey] = photos to shownIds
-                        saveCacheToDisk(cacheKey, photos, shownIds)
-                        return randomPhoto
-                    } else {
-                        // All photos shown, reset
-                        Timber.d("All cached photos shown for query=$query, resetting rotation")
-                        shownIds.clear()
-                        if (photos.isNotEmpty()) {
-                            val randomPhoto = photos.random()
-                            shownIds.add(randomPhoto.id)
-                            inMemoryCache[cacheKey] = photos to shownIds
-                            saveCacheToDisk(cacheKey, photos, shownIds)
-                            return randomPhoto
-                        }
-                    }
-                } else {
+            // Check if cache exists and is not expired
+            val metadata = photoCacheDao.getCacheMetadata(cacheKey)
+            if (metadata == null || isExpired(metadata.cachedAt)) {
+                if (metadata != null) {
                     Timber.d("Photo cache expired: query=$query")
-                    file.delete()
+                    // Delete metadata - cascade will automatically delete related photos and shown photos
+                    photoCacheDao.deleteCacheMetadata(cacheKey)
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to read cached photos: query=$query")
-                file.delete()
+                Timber.d("Photo cache miss or empty: query=$query")
+                return@withContext null
             }
+            
+            // Get unshown photos directly from database
+            val unshownPhotos = photoCacheDao.getUnshownPhotosByQuery(cacheKey)
+            
+            if (unshownPhotos.isEmpty()) {
+                Timber.d("No unshown photos for query: $query")
+                return@withContext null
+            }
+            
+            // Pick a random unshown photo
+            val randomPhotoEntity = unshownPhotos.random()
+            val randomPhoto = mapToBackgroundImage(randomPhotoEntity)
+            
+            // Mark as shown
+            val shownPhotoEntity = ShownPhotoEntity(
+                id = "${cacheKey}_${randomPhotoEntity.id}",
+                cacheKey = cacheKey,
+                photoId = randomPhotoEntity.id,
+                shownAt = System.currentTimeMillis()
+            )
+            photoCacheDao.insertShownPhoto(shownPhotoEntity)
+            
+            // Remove photo from cache after showing
+            // Deleting the photo will cascade delete the shown photo record
+            photoCacheDao.deletePhoto(randomPhotoEntity.id, cacheKey)
+            
+            val remainingCount = photoCacheDao.getPhotoCount(cacheKey)
+            Timber.d("Photo cache hit: query=$query, id=${randomPhoto.id}, remaining=$remainingCount")
+            
+            randomPhoto
         }
-
-        Timber.d("Photo cache miss or empty: query=$query")
-        return null
     }
 
     /**
      * Check if cache has photos for the given query
      */
     suspend fun hasCachedPhotos(query: String): Boolean {
-        val cacheKey = query.lowercase().trim()
-        val cached = inMemoryCache[cacheKey]
-        if (cached != null && cached.first.isNotEmpty()) {
-            return true
-        }
-        
-        val file = File(cacheDir, "$cacheKey.json")
-        if (file.exists()) {
-            try {
-                val cacheEntry = json.decodeFromString<PhotoCacheEntry>(file.readText())
-                return !isExpired(cacheEntry.cachedAt) && cacheEntry.photos.isNotEmpty()
-            } catch (e: Exception) {
-                return false
+        return withContext(Dispatchers.IO) {
+            val cacheKey = query.lowercase().trim()
+            val metadata = photoCacheDao.getCacheMetadata(cacheKey)
+            if (metadata == null || isExpired(metadata.cachedAt)) {
+                return@withContext false
             }
+            val count = photoCacheDao.getPhotoCount(cacheKey)
+            count > 0
         }
-        return false
     }
 
     /**
      * Cache multiple photos for the given query (replaces existing cache)
      */
-    suspend fun cachePhotos(query: String, photos: List<UnsplashPhoto>) {
-        if (photos.isEmpty()) {
-            Timber.w("Attempted to cache empty photo list for query=$query")
-            return
+    suspend fun cachePhotos(query: String, photos: List<BackgroundImage>) {
+        withContext(Dispatchers.IO) {
+            if (photos.isEmpty()) {
+                Timber.w("Attempted to cache empty photo list for query=$query")
+                return@withContext
+            }
+            
+            val cacheKey = query.lowercase().trim()
+            val cachedAt = System.currentTimeMillis()
+            
+            // Delete existing metadata - cascade will automatically delete related photos and shown photos
+            photoCacheDao.deleteCacheMetadata(cacheKey)
+            
+            // Insert new cache metadata first (required for FK constraint)
+            val metadata = CacheMetadataEntity(
+                cacheKey = cacheKey,
+                cachedAt = cachedAt
+            )
+            photoCacheDao.insertCacheMetadata(metadata)
+            
+            // Convert to entities and insert photos
+            val photoEntities = photos.map { mapToPhotoCacheEntity(it, cacheKey, cachedAt) }
+            photoCacheDao.insertPhotos(photoEntities)
+            
+            Timber.d("Cached ${photos.size} photos for query=$query")
         }
-        
-        val cacheKey = query.lowercase().trim()
-        val shownIds = mutableSetOf<String>()
-        
-        // Update in-memory cache
-        inMemoryCache[cacheKey] = photos to shownIds
-        
-        // Save to disk
-        saveCacheToDisk(cacheKey, photos, shownIds)
-        Timber.d("Cached ${photos.size} photos for query=$query")
     }
 
     /**
      * Clear all cached photos
+     * Deleting all metadata will cascade delete all related photos and shown photos
      */
     suspend fun clearCache() {
-        try {
-            cacheDir.listFiles()?.forEach { it.delete() }
-            inMemoryCache.clear()
-            Timber.d("Photo cache cleared")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to clear photo cache")
+        withContext(Dispatchers.IO) {
+            try {
+                photoCacheDao.clearAllCacheMetadata()
+                Timber.d("Photo cache cleared")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to clear photo cache")
+            }
         }
     }
 
@@ -180,44 +137,29 @@ class PhotoCacheDataSource @Inject constructor(
         val expiryTime = CACHE_EXPIRY_HOURS * 60 * 60 * 1000
         return (System.currentTimeMillis() - cachedAt) > expiryTime
     }
-
-    private suspend fun saveCacheToDisk(cacheKey: String, photos: List<UnsplashPhoto>, shownIds: Set<String>) {
-        val file = File(cacheDir, "$cacheKey.json")
-        try {
-            val cacheEntry = PhotoCacheEntry(
-                photos = photos,
-                cachedAt = System.currentTimeMillis(),
-                query = cacheKey,
-                shownPhotoIds = shownIds
-            )
-            file.writeText(json.encodeToString(cacheEntry))
-        } catch (e: IOException) {
-            Timber.e(e, "Failed to save cached photos: query=$cacheKey")
-        }
+    
+    private fun mapToPhotoCacheEntity(
+        image: BackgroundImage,
+        cacheKey: String,
+        cachedAt: Long
+    ): PhotoCacheEntity {
+        return PhotoCacheEntity(
+            id = image.id,
+            cacheKey = cacheKey,
+            url = image.url,
+            photographer = image.photographer,
+            photographerUsername = image.photographerUsername,
+            cachedAt = cachedAt
+        )
     }
-
-    private fun loadCacheFromDisk() {
-        try {
-            cacheDir.listFiles()?.forEach { file ->
-                if (file.name.endsWith(".json")) {
-                    try {
-                        val cacheEntry = json.decodeFromString<PhotoCacheEntry>(file.readText())
-                        if (!isExpired(cacheEntry.cachedAt) && cacheEntry.photos.isNotEmpty()) {
-                            val key = file.nameWithoutExtension
-                            inMemoryCache[key] = cacheEntry.photos to cacheEntry.shownPhotoIds.toMutableSet()
-                        } else {
-                            file.delete()
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to load cached photos: ${file.name}")
-                        file.delete()
-                    }
-                }
-            }
-            Timber.d("Loaded ${inMemoryCache.size} cached photo sets from disk")
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to load cache from disk")
-        }
+    
+    private fun mapToBackgroundImage(entity: PhotoCacheEntity): BackgroundImage {
+        return BackgroundImage(
+            id = entity.id,
+            url = entity.url,
+            photographer = entity.photographer,
+            photographerUsername = entity.photographerUsername
+        )
     }
 }
 

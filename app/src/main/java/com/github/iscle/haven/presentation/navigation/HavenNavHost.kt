@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.github.iscle.haven.presentation.history.HistoryScreen
 import com.github.iscle.haven.presentation.home.HomeScreen
 import com.github.iscle.haven.presentation.settings.SettingsScreen
 import timber.log.Timber
@@ -23,6 +24,10 @@ fun HavenNavHost(
                 onNavigateToSettings = {
                     Timber.d("Navigation: Navigating to SettingsRoute")
                     navController.navigate(SettingsRoute)
+                },
+                onNavigateToHistory = {
+                    Timber.d("Navigation: Navigating to HistoryRoute")
+                    navController.navigate(HistoryRoute)
                 }
             )
         }
@@ -32,6 +37,16 @@ fun HavenNavHost(
             SettingsScreen(
                 onNavigateBack = {
                     Timber.d("Navigation: Navigating back from SettingsRoute")
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable<HistoryRoute> {
+            Timber.d("Navigation: Navigating to HistoryRoute")
+            HistoryScreen(
+                onNavigateBack = {
+                    Timber.d("Navigation: Navigating back from HistoryRoute")
                     navController.popBackStack()
                 }
             )

@@ -94,14 +94,10 @@ fun SettingsScreen(
     }
     
     var cityNameInput by remember { mutableStateOf(uiState.cityName) }
-    var weatherApiKeyInput by remember { mutableStateOf(uiState.weatherApiKey) }
 
     // Update local state when uiState changes
     if (uiState.cityName != cityNameInput && cityNameInput.isEmpty()) {
         cityNameInput = uiState.cityName
-    }
-    if (uiState.weatherApiKey != weatherApiKeyInput && weatherApiKeyInput.isEmpty()) {
-        weatherApiKeyInput = uiState.weatherApiKey
     }
 
     Scaffold(
@@ -209,54 +205,6 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Enter the name of your city to get weather information",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
-
-            // Weather API Key Setting
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = "OpenWeatherMap API Key",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = weatherApiKeyInput,
-                            onValueChange = { weatherApiKeyInput = it },
-                            label = { Text("API Key") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                            placeholder = { Text("Enter your OpenWeatherMap API Key") }
-                        )
-                        Button(
-                            onClick = {
-                                if (weatherApiKeyInput.isNotBlank()) {
-                                    viewModel.setWeatherApiKey(weatherApiKeyInput)
-                                }
-                            }
-                        ) {
-                            Text("Save")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Get your free API key at: https://openweathermap.org/api",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )

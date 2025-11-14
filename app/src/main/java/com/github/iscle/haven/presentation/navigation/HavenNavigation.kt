@@ -8,3 +8,6 @@ object HomeRoute
 @Serializable
 object SettingsRoute
 
+@Serializable
+object HistoryRoute
+
