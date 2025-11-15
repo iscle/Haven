@@ -24,6 +24,9 @@ data class PhotoCacheEntity(
     val url: String,
     val photographer: String,
     val photographerUsername: String,
+    val unsplashUrl: String? = null,
+    val artistProfileUrl: String? = null,
+    val profileImageUrl: String? = null,
     val cachedAt: Long // timestamp when this photo was cached
 )
 

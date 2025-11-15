@@ -1,5 +1,7 @@
 package com.github.iscle.haven.presentation.history
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,12 +18,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,8 +45,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -124,6 +132,7 @@ fun HistoryScreen(
 
             // Details bottom sheet
             if (uiState.showDetails && uiState.selectedImage != null) {
+                val context = LocalContext.current
                 ModalBottomSheet(
                     onDismissRequest = { viewModel.hideDetails() },
                     sheetState = sheetState
@@ -131,7 +140,15 @@ fun HistoryScreen(
                     ImageDetailsSheet(
                         history = uiState.selectedImage!!,
                         onFavoriteClick = { viewModel.toggleFavorite(uiState.selectedImage!!.image.id) },
-                        onDismiss = { viewModel.hideDetails() }
+                        onDismiss = { viewModel.hideDetails() },
+                        onOpenUnsplash = { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        },
+                        onOpenArtistProfile = { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        }
                     )
                 }
             }
@@ -222,7 +239,9 @@ fun HistoryGridItem(
 fun ImageDetailsSheet(
     history: com.github.iscle.haven.domain.model.WallpaperHistory,
     onFavoriteClick: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenUnsplash: (String) -> Unit,
+    onOpenArtistProfile: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -268,20 +287,145 @@ fun ImageDetailsSheet(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Photographer name
-            Text(
-                text = history.image.photographer,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            // Photographer info with profile image (clickable to open artist profile)
+            if (!history.image.artistProfileUrl.isNullOrBlank()) {
+                Card(
+                    onClick = { onOpenArtistProfile(history.image.artistProfileUrl) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Profile image (circular)
+                        if (!history.image.profileImageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = history.image.profileImageUrl,
+                                contentDescription = "Profile picture",
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            // Placeholder circle if no profile image
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clip(CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                        
+                        // Photographer name and username
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = history.image.photographer,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
 
-            // Username
-            Text(
-                text = "@${history.image.photographerUsername}",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
+                            Text(
+                                text = "@${history.image.photographerUsername}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        }
+                        
+                        // Subtle arrow icon to indicate clickability
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = "View profile",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            } else {
+                // Non-clickable version if no profile URL
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Profile image (circular)
+                        if (!history.image.profileImageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = history.image.profileImageUrl,
+                                contentDescription = "Profile picture",
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = CircleShape
+                                    ),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            // Placeholder circle if no profile image
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                        
+                        // Photographer name and username
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = history.image.photographer,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            Text(
+                                text = "@${history.image.photographerUsername}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
 
             // Divider
             androidx.compose.material3.Divider(
@@ -329,28 +473,25 @@ fun ImageDetailsSheet(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Favorite action button
-            androidx.compose.material3.Button(
-                onClick = onFavoriteClick,
-                modifier = Modifier.fillMaxWidth(),
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = if (history.isFavorite) 
-                        MaterialTheme.colorScheme.errorContainer 
-                    else 
-                        MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Icon(
-                    imageVector = if (history.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (history.isFavorite) "Remove from Favorites" else "Add to Favorites",
-                    style = MaterialTheme.typography.titleMedium
-                )
+            // Open on Unsplash button
+            if (!history.image.unsplashUrl.isNullOrBlank()) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { onOpenUnsplash(history.image.unsplashUrl) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Link,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "View on Unsplash",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
+
         }
     }
 }

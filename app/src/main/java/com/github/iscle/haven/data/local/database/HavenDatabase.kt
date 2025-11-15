@@ -16,7 +16,7 @@ import com.github.iscle.haven.data.local.database.entity.WallpaperHistoryEntity
         ShownPhotoEntity::class,
         CacheMetadataEntity::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = false
 )
 abstract class HavenDatabase : RoomDatabase() {

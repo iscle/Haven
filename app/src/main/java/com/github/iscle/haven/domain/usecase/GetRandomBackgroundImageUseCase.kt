@@ -1,7 +1,7 @@
 package com.github.iscle.haven.domain.usecase
 
-import com.github.iscle.haven.domain.repository.UnsplashRepository
 import com.github.iscle.haven.domain.model.BackgroundImage
+import com.github.iscle.haven.domain.repository.UnsplashRepository
 import timber.log.Timber
 import javax.inject.Inject
 

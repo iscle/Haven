@@ -29,6 +29,7 @@ data class UnsplashPhoto(
     @SerialName("alt_description")
     val altDescription: String? = null,
     val urls: UnsplashUrls,
+    val links: UnsplashLinks,
     val user: UnsplashUser
 )
 
@@ -44,6 +45,15 @@ data class UnsplashUrls(
 )
 
 @Serializable
+data class UnsplashLinks(
+    val self: String? = null,
+    val html: String,
+    val download: String? = null,
+    @SerialName("download_location")
+    val downloadLocation: String? = null
+)
+
+@Serializable
 data class UnsplashUser(
     val id: String,
     val username: String,
@@ -51,6 +61,27 @@ data class UnsplashUser(
     @SerialName("first_name")
     val firstName: String? = null,
     @SerialName("last_name")
-    val lastName: String? = null
+    val lastName: String? = null,
+    @SerialName("profile_image")
+    val profileImage: UnsplashProfileImage? = null,
+    val links: UnsplashUserLinks
+)
+
+@Serializable
+data class UnsplashProfileImage(
+    val small: String? = null,
+    val medium: String? = null,
+    val large: String? = null
+)
+
+@Serializable
+data class UnsplashUserLinks(
+    val self: String? = null,
+    val html: String,
+    val photos: String? = null,
+    val likes: String? = null,
+    val portfolio: String? = null,
+    val following: String? = null,
+    val followers: String? = null
 )
 

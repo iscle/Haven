@@ -1,7 +1,7 @@
 package com.github.iscle.haven.domain.usecase
 
-import com.github.iscle.haven.domain.repository.WeatherRepository
 import com.github.iscle.haven.domain.model.Weather
+import com.github.iscle.haven.domain.repository.WeatherRepository
 import timber.log.Timber
 import javax.inject.Inject
 

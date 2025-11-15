@@ -18,7 +18,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Haven">
         <activity
-            android:name=".MainActivity"
+            android:name=".presentation.home.LauncherActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -26,6 +26,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".presentation.history.HistoryActivity"
+            android:exported="false" />
+        <activity
+            android:name=".presentation.settings.SettingsActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

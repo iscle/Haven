@@ -7,11 +7,11 @@ import com.github.iscle.haven.data.remote.model.UnsplashPhoto
 import com.github.iscle.haven.data.remote.model.UnsplashSearchResponse
 import com.github.iscle.haven.domain.model.BackgroundImage
 import com.github.iscle.haven.domain.model.WallpaperHistory
-import com.github.iscle.haven.domain.repository.UnsplashRepository as UnsplashRepositoryInterface
 import kotlinx.coroutines.flow.Flow
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.github.iscle.haven.domain.repository.UnsplashRepository as UnsplashRepositoryInterface
 
 @Singleton
 class UnsplashRepositoryImpl @Inject constructor(
@@ -163,7 +163,10 @@ class UnsplashRepositoryImpl @Inject constructor(
             id = photo.id,
             url = photo.urls.full,
             photographer = photo.user.name,
-            photographerUsername = photo.user.username
+            photographerUsername = photo.user.username,
+            unsplashUrl = photo.links.html,
+            artistProfileUrl = photo.user.links.html,
+            profileImageUrl = photo.user.profileImage?.large
         )
     }
 }

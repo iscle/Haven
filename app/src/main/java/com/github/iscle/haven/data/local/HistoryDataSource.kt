@@ -40,6 +40,9 @@ class HistoryDataSource @Inject constructor(
                     url = image.url,
                     photographer = image.photographer,
                     photographerUsername = image.photographerUsername,
+                    unsplashUrl = image.unsplashUrl,
+                    artistProfileUrl = image.artistProfileUrl,
+                    profileImageUrl = image.profileImageUrl,
                     shownAt = currentTime,
                     isFavorite = false,
                     timesShown = 1
@@ -125,7 +128,10 @@ class HistoryDataSource @Inject constructor(
                 id = imageId,
                 url = url,
                 photographer = photographer,
-                photographerUsername = photographerUsername
+                photographerUsername = photographerUsername,
+                unsplashUrl = unsplashUrl,
+                artistProfileUrl = artistProfileUrl,
+                profileImageUrl = profileImageUrl
             ),
             shownAt = shownAt,
             isFavorite = isFavorite,
@@ -138,7 +144,10 @@ class HistoryDataSource @Inject constructor(
             id = imageId,
             url = url,
             photographer = photographer,
-            photographerUsername = photographerUsername
+            photographerUsername = photographerUsername,
+            unsplashUrl = unsplashUrl,
+            artistProfileUrl = artistProfileUrl,
+            profileImageUrl = profileImageUrl
         )
     }
 }

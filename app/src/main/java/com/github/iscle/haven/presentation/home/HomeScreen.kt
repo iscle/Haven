@@ -1,14 +1,15 @@
 package com.github.iscle.haven.presentation.home
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,39 +31,33 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.github.iscle.haven.ui.theme.RajdhaniFontFamily
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import coil.ImageLoader
 import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
-import coil.compose.SubcomposeAsyncImage
-import coil.compose.SubcomposeAsyncImageContent
-import coil.request.ImageRequest
-import androidx.compose.ui.platform.LocalContext
-import coil.compose.LocalImageLoader
 import coil.imageLoader
 import coil.request.CachePolicy
+import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.github.iscle.haven.domain.model.BackgroundImage
+import com.github.iscle.haven.presentation.history.HistoryActivity
+import com.github.iscle.haven.presentation.settings.SettingsActivity
+import com.github.iscle.haven.ui.theme.RajdhaniFontFamily
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import java.time.Instant
-import java.time.LocalDateTime
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -68,19 +65,28 @@ import kotlin.math.roundToInt
 // Text shadow style for better readability over backgrounds
 private val textShadow = Shadow(
     color = Color.Black.copy(alpha = 0.75f),
-    offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+    offset = Offset(2f, 2f),
     blurRadius = 8f
 )
 
 @Composable
 fun HomeScreen(
-    onNavigateToSettings: () -> Unit,
-    onNavigateToHistory: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val imageLoader = context.imageLoader
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Launch activities directly instead of using navigation
+    val launchSettings = {
+        val intent = Intent(context, SettingsActivity::class.java)
+        context.startActivity(intent)
+    }
+    
+    val launchHistory = {
+        val intent = Intent(context, HistoryActivity::class.java)
+        context.startActivity(intent)
+    }
     
     // Track the displayed image (only updates when new image is fully loaded)
     var displayedImage by remember { mutableStateOf<BackgroundImage?>(null) }
@@ -134,9 +140,9 @@ fun HomeScreen(
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(image.url)
-                        .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
-                        .networkCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .networkCachePolicy(CachePolicy.ENABLED)
                         .build(),
                     imageLoader = imageLoader,
                     contentDescription = "Background",
@@ -168,7 +174,7 @@ fun HomeScreen(
             weather = uiState.weather,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(32.dp)
+                .padding(48.dp)
         )
 
         // Time and Date at center
@@ -181,30 +187,29 @@ fun HomeScreen(
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(32.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(48.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // History button
             Box {
                 // Shadow layer
-                Icon(
-                    imageVector = Icons.Default.Collections,
-                    contentDescription = null,
-                    tint = Color.Black.copy(alpha = 0.5f),
-                    modifier = Modifier
-                        .size(32.dp)
-                        .offset(x = 2.dp, y = 2.dp)
-                )
+//                Icon(
+//                    imageVector = Icons.Default.Collections,
+//                    contentDescription = null,
+//                    tint = Color.Black.copy(alpha = 0.5f),
+//                    modifier = Modifier
+//                        .size(48.dp)
+//                        .offset(x = 3.dp, y = 3.dp)
+//                )
                 // Main icon
                 IconButton(
-                    onClick = onNavigateToHistory,
-                    modifier = Modifier.size(32.dp)
+                    onClick = launchHistory,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Collections,
                         contentDescription = "Wallpaper History",
                         tint = Color.White,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(48.dp)
                     )
                 }
             }
@@ -212,24 +217,23 @@ fun HomeScreen(
             // Settings button
             Box {
                 // Shadow layer
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = null,
-                    tint = Color.Black.copy(alpha = 0.5f),
-                    modifier = Modifier
-                        .size(32.dp)
-                        .offset(x = 2.dp, y = 2.dp)
-                )
+//                Icon(
+//                    imageVector = Icons.Default.Settings,
+//                    contentDescription = null,
+//                    tint = Color.Black.copy(alpha = 0.5f),
+//                    modifier = Modifier
+//                        .size(48.dp)
+//                        .offset(x = 3.dp, y = 3.dp)
+//                )
                 // Main icon
                 IconButton(
-                    onClick = onNavigateToSettings,
-                    modifier = Modifier.size(32.dp)
+                    onClick = launchSettings,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = "Settings",
                         tint = Color.White,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(48.dp)
                     )
                 }
             }
@@ -239,7 +243,7 @@ fun HomeScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp)
+                .padding(24.dp)
         ) {
             AnimatedContent(
                 targetState = displayedImage,
@@ -255,7 +259,8 @@ fun HomeScreen(
                 if (image != null) {
                     Text(
                         text = "Photo by ${image.photographer}",
-                        style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 18.sp,
+                        style = TextStyle(
                             shadow = textShadow
                         ),
                         color = Color.White.copy(alpha = 0.9f)
@@ -276,31 +281,79 @@ fun WeatherWidget(
 ) {
     weather?.let {
         Column(
-            modifier = modifier
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            // Main temperature and location row
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${it.temperature.roundToInt()}°",
-                    fontSize = 64.sp,
+                    text = "${it.feelsLike.roundToInt()}°",
+                    fontSize = 96.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     style = TextStyle(shadow = textShadow)
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(24.dp))
                 Column {
                     Text(
                         text = it.cityName,
-                        fontSize = 24.sp,
+                        fontSize = 36.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
                         style = TextStyle(shadow = textShadow)
                     )
                     Text(
                         text = it.description.replaceFirstChar { char -> char.uppercase() },
-                        fontSize = 16.sp,
+                        fontSize = 24.sp,
                         color = Color.White.copy(alpha = 0.9f),
+                        style = TextStyle(shadow = textShadow)
+                    )
+                }
+            }
+            
+            // Actual temperature and humidity with icons
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(30.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Actual temperature with thermometer icon
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Thermostat,
+                        contentDescription = "Temperature",
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(27.dp)
+                    )
+                    Text(
+                        text = "${it.temperature.roundToInt()}°",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.85f),
+                        style = TextStyle(shadow = textShadow)
+                    )
+                }
+                
+                // Humidity with water drop icon
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WaterDrop,
+                        contentDescription = "Humidity",
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(27.dp)
+                    )
+                    Text(
+                        text = "${it.humidity}%",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.85f),
                         style = TextStyle(shadow = textShadow)
                     )
                 }
@@ -351,7 +404,7 @@ fun ClockWidget(
                 "%02d:%02d",
                 hour, minute
             ),
-            fontSize = 120.sp,
+            fontSize = 180.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = RajdhaniFontFamily,
             color = Color.White,
@@ -365,7 +418,7 @@ fun ClockWidget(
         
         Text(
             text = dateText,
-            fontSize = 32.sp,
+            fontSize = 48.sp,
             fontWeight = FontWeight.Normal,
             fontFamily = RajdhaniFontFamily,
             color = Color.White.copy(alpha = 0.95f),

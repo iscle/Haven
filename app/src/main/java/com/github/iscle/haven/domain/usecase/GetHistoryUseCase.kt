@@ -1,7 +1,7 @@
 package com.github.iscle.haven.domain.usecase
 
-import com.github.iscle.haven.domain.repository.UnsplashRepository
 import com.github.iscle.haven.domain.model.WallpaperHistory
+import com.github.iscle.haven.domain.repository.UnsplashRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 

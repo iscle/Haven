@@ -7,12 +7,12 @@ import com.github.iscle.haven.domain.usecase.GetCityNameUseCase
 import com.github.iscle.haven.domain.usecase.SetBackgroundIntervalUseCase
 import com.github.iscle.haven.domain.usecase.SetCityNameUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 data class SettingsUiState(

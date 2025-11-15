@@ -9,15 +9,14 @@ import com.github.iscle.haven.domain.usecase.GetCityNameUseCase
 import com.github.iscle.haven.domain.usecase.GetRandomBackgroundImageUseCase
 import com.github.iscle.haven.domain.usecase.GetWeatherUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import timber.log.Timber
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 data class HomeUiState(

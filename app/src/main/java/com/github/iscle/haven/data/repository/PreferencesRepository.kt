@@ -1,10 +1,10 @@
 package com.github.iscle.haven.data.repository
 
 import com.github.iscle.haven.data.local.PreferencesDataSource
-import com.github.iscle.haven.domain.repository.PreferencesRepository as PreferencesRepositoryInterface
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.github.iscle.haven.domain.repository.PreferencesRepository as PreferencesRepositoryInterface
 
 @Singleton
 class PreferencesRepositoryImpl @Inject constructor(

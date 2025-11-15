@@ -1,12 +1,12 @@
 package com.github.iscle.haven.data.repository
 
-import com.github.iscle.haven.data.remote.WeatherCodeMapper
 import com.github.iscle.haven.data.remote.WeatherApiService
+import com.github.iscle.haven.data.remote.WeatherCodeMapper
 import com.github.iscle.haven.domain.model.Weather
-import com.github.iscle.haven.domain.repository.WeatherRepository as WeatherRepositoryInterface
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.github.iscle.haven.domain.repository.WeatherRepository as WeatherRepositoryInterface
 
 @Singleton
 class WeatherRepositoryImpl @Inject constructor(

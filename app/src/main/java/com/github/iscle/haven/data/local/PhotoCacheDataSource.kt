@@ -149,6 +149,9 @@ class PhotoCacheDataSource @Inject constructor(
             url = image.url,
             photographer = image.photographer,
             photographerUsername = image.photographerUsername,
+            unsplashUrl = image.unsplashUrl,
+            artistProfileUrl = image.artistProfileUrl,
+            profileImageUrl = image.profileImageUrl,
             cachedAt = cachedAt
         )
     }
@@ -158,7 +161,10 @@ class PhotoCacheDataSource @Inject constructor(
             id = entity.id,
             url = entity.url,
             photographer = entity.photographer,
-            photographerUsername = entity.photographerUsername
+            photographerUsername = entity.photographerUsername,
+            unsplashUrl = entity.unsplashUrl,
+            artistProfileUrl = entity.artistProfileUrl,
+            profileImageUrl = entity.profileImageUrl
         )
     }
 }
