@@ -1,11 +1,11 @@
 package com.github.iscle.haven.presentation.history
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -22,8 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Link
@@ -46,13 +46,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.github.iscle.haven.domain.model.WallpaperHistory
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -63,7 +67,7 @@ fun HistoryScreen(
     onNavigateBack: () -> Unit,
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
@@ -113,7 +117,7 @@ fun HistoryScreen(
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 180.dp),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    contentPadding = PaddingValues(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -142,11 +146,11 @@ fun HistoryScreen(
                         onFavoriteClick = { viewModel.toggleFavorite(uiState.selectedImage!!.image.id) },
                         onDismiss = { viewModel.hideDetails() },
                         onOpenUnsplash = { url ->
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
                             context.startActivity(intent)
                         },
                         onOpenArtistProfile = { url ->
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
                             context.startActivity(intent)
                         }
                     )
@@ -158,7 +162,7 @@ fun HistoryScreen(
 
 @Composable
 fun HistoryGridItem(
-    history: com.github.iscle.haven.domain.model.WallpaperHistory,
+    history: WallpaperHistory,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit
 ) {
@@ -184,7 +188,7 @@ fun HistoryGridItem(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                        Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
                                 Color.Black.copy(alpha = 0.7f)
@@ -237,7 +241,7 @@ fun HistoryGridItem(
 
 @Composable
 fun ImageDetailsSheet(
-    history: com.github.iscle.haven.domain.model.WallpaperHistory,
+    history: WallpaperHistory,
     onFavoriteClick: () -> Unit,
     onDismiss: () -> Unit,
     onOpenUnsplash: (String) -> Unit,
@@ -268,7 +272,7 @@ fun ImageDetailsSheet(
                     .padding(16.dp)
                     .background(
                         Color.Black.copy(alpha = 0.5f),
-                        shape = androidx.compose.foundation.shape.CircleShape
+                        shape = CircleShape
                     )
             ) {
                 Icon(
@@ -351,7 +355,7 @@ fun ImageDetailsSheet(
                         
                         // Subtle arrow icon to indicate clickability
                         Icon(
-                            imageVector = Icons.Default.ArrowForward,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = "View profile",
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             modifier = Modifier.size(20.dp)

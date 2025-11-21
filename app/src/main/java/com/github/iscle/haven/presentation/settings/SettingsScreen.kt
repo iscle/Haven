@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // Predefined intervals from 10 seconds to 24 hours
 private val backgroundIntervals = listOf(
@@ -80,7 +81,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
     val currentIntervalIndex = remember(uiState.backgroundIntervalSeconds) {
         findClosestIntervalIndex(uiState.backgroundIntervalSeconds)

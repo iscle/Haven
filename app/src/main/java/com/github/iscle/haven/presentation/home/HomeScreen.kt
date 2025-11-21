@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.WaterDrop
@@ -47,12 +48,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.github.iscle.haven.domain.model.BackgroundImage
+import com.github.iscle.haven.domain.model.Weather
 import com.github.iscle.haven.presentation.history.HistoryActivity
 import com.github.iscle.haven.presentation.settings.SettingsActivity
 import com.github.iscle.haven.ui.theme.RajdhaniFontFamily
@@ -75,7 +78,7 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val imageLoader = context.imageLoader
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
     // Launch activities directly instead of using navigation
     val launchSettings = {
@@ -193,20 +196,20 @@ fun HomeScreen(
             // History button
             Box {
                 // Shadow layer
-//                Icon(
-//                    imageVector = Icons.Default.Collections,
-//                    contentDescription = null,
-//                    tint = Color.Black.copy(alpha = 0.5f),
-//                    modifier = Modifier
-//                        .size(48.dp)
-//                        .offset(x = 3.dp, y = 3.dp)
-//                )
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = null,
+                    tint = Color.Black.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .offset(x = 3.dp, y = 3.dp)
+                )
                 // Main icon
                 IconButton(
                     onClick = launchHistory,
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Collections,
+                        imageVector = Icons.Default.History,
                         contentDescription = "Wallpaper History",
                         tint = Color.White,
                         modifier = Modifier.size(48.dp)
@@ -217,14 +220,14 @@ fun HomeScreen(
             // Settings button
             Box {
                 // Shadow layer
-//                Icon(
-//                    imageVector = Icons.Default.Settings,
-//                    contentDescription = null,
-//                    tint = Color.Black.copy(alpha = 0.5f),
-//                    modifier = Modifier
-//                        .size(48.dp)
-//                        .offset(x = 3.dp, y = 3.dp)
-//                )
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = Color.Black.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .offset(x = 3.dp, y = 3.dp)
+                )
                 // Main icon
                 IconButton(
                     onClick = launchSettings,
@@ -249,9 +252,9 @@ fun HomeScreen(
                 targetState = displayedImage,
                 transitionSpec = {
                     fadeIn(
-                        animationSpec = tween(1000, delayMillis = 0)
+                        animationSpec = tween(1000)
                     ) togetherWith fadeOut(
-                        animationSpec = tween(1000, delayMillis = 0)
+                        animationSpec = tween(1000)
                     )
                 },
                 label = "photographer_credit_transition"
@@ -276,7 +279,7 @@ fun HomeScreen(
 
 @Composable
 fun WeatherWidget(
-    weather: com.github.iscle.haven.domain.model.Weather?,
+    weather: Weather?,
     modifier: Modifier = Modifier
 ) {
     weather?.let {
