@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release (e.g. v1.0.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Signed APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore the signing key
+        env:
+          HAVEN_KEYSTORE_BASE64: ${{ secrets.HAVEN_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$HAVEN_KEYSTORE_BASE64" ]; then
+            echo "::error::HAVEN_KEYSTORE_BASE64 is not set — the APK would be unsigned."
+            exit 1
+          fi
+          echo "$HAVEN_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/haven-release.jks"
+
+      - name: Assemble release APK
+        env:
+          HAVEN_STORE_FILE: ${{ runner.temp }}/haven-release.jks
+          HAVEN_STORE_PASSWORD: ${{ secrets.HAVEN_STORE_PASSWORD }}
+          HAVEN_KEY_ALIAS: ${{ secrets.HAVEN_KEY_ALIAS }}
+          HAVEN_KEY_PASSWORD: ${{ secrets.HAVEN_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Verify the signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -r | head -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
+
+      - name: Name the artifact after the tag
+        id: artifact
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          NAME="Haven-$TAG.apk"
+          mv app/build/outputs/apk/release/app-release.apk "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.artifact.outputs.tag }}" \
+            "${{ steps.artifact.outputs.name }}" \
+            --title "${{ steps.artifact.outputs.tag }}" \
+            --generate-notes
+
+      - name: Clean up the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/haven-release.jks"

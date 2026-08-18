@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,19 @@ plugins {
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
 }
+
+// Release signing credentials come from local.properties when building locally
+// and from the environment on CI. Neither is in git; without them the release
+// build is simply left unsigned.
+val signingProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingSecret(property: String, environmentVariable: String): String? =
+    signingProperties.getProperty(property) ?: System.getenv(environmentVariable)
+
+val havenStoreFile = signingSecret("havenStoreFile", "HAVEN_STORE_FILE")?.let(::File)
 
 android {
     namespace = "com.github.iscle.haven"
@@ -16,13 +31,25 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (havenStoreFile?.exists() == true) {
+            create("release") {
+                storeFile = havenStoreFile
+                storePassword = signingSecret("havenStorePassword", "HAVEN_STORE_PASSWORD")
+                keyAlias = signingSecret("havenKeyAlias", "HAVEN_KEY_ALIAS")
+                keyPassword = signingSecret("havenKeyPassword", "HAVEN_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -1,5 +1,8 @@
 # Haven
 
+[![Build](https://github.com/iscle/Haven/actions/workflows/build.yml/badge.svg)](https://github.com/iscle/Haven/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/iscle/Haven?label=release)](https://github.com/iscle/Haven/releases/latest)
+
 A launcher for a wall-mounted smart display: a full-screen clock over a rotating Unsplash
 wallpaper, with local weather, an app drawer, and only the notifications you actually want
 visible in a shared room.
@@ -42,6 +45,9 @@ Android launcher — any always-on landscape display will do.
   and dim. One tap brings the day layout back for twenty seconds.
 
 ## Getting started
+
+A signed APK is attached to every [release](https://github.com/iscle/Haven/releases/latest) —
+download it and `adb install` it, or build it yourself.
 
 Requirements: JDK 21, Android SDK 36, a device on Android 7.0 (API 24) or newer.
 
@@ -97,6 +103,18 @@ app/src/main/java/com/github/iscle/haven/
 
 Wallpapers come from Unsplash's public search endpoint and weather from Open-Meteo, so there
 are no keys to configure.
+
+## Releases
+
+Pushing a `v*` tag builds a release APK, signs it with the key held in repository secrets and
+publishes it with generated notes:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+Every push and pull request runs unit tests, lint and a debug build.
 
 ## Design
 
