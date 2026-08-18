@@ -28,7 +28,11 @@ class WeatherApiService @Inject constructor(
                 parameter("longitude", lon)
                 parameter("current_weather", true)
                 parameter("temperature_unit", "celsius")
-                parameter("hourly", "relativehumidity_2m,apparent_temperature")
+                parameter("timezone", "auto")
+                parameter(
+                    "hourly",
+                    "relativehumidity_2m,apparent_temperature,temperature_2m,weathercode,is_day"
+                )
             }.body<OpenMeteoWeatherResponse>()
             Timber.d("Weather fetched successfully: temp=${weather.currentWeather.temperature}°C, condition=${weather.currentWeather.weatherCode}")
             Result.success(weather)

@@ -15,9 +15,14 @@ class HistoryActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Timber.Forest.d("HistoryActivity: onCreate")
 
-        // Show system bars for normal app experience
+        // Show the system bars, but draw the dark surface behind them — the
+        // screens inset their own content. Otherwise the bars sit as light grey
+        // slabs against a near-black UI.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
+        windowInsetsController.isAppearanceLightStatusBars = false
+        windowInsetsController.isAppearanceLightNavigationBars = false
         Timber.Forest.d("HistoryActivity: System bars shown")
 
         setContent {

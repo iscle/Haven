@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Haven" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Haven" parent="android:Theme.Material.NoActionBar">
+        <!-- Painted before the first frame, and behind the system bars. -->
+        <item name="android:windowBackground">@color/haven_surface</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Haven is always dark, so the bar icons are always light. -->
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

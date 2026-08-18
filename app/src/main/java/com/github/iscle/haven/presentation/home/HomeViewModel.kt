@@ -2,12 +2,18 @@ package com.github.iscle.haven.presentation.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.iscle.haven.domain.model.AppPreferences
 import com.github.iscle.haven.domain.model.BackgroundImage
+import com.github.iscle.haven.domain.model.HavenNotification
 import com.github.iscle.haven.domain.model.Weather
+import com.github.iscle.haven.domain.usecase.GetAllowedNotificationsUseCase
+import com.github.iscle.haven.domain.usecase.GetAppPreferencesUseCase
 import com.github.iscle.haven.domain.usecase.GetBackgroundIntervalUseCase
 import com.github.iscle.haven.domain.usecase.GetCityNameUseCase
+import com.github.iscle.haven.domain.usecase.GetPinnedImageUseCase
 import com.github.iscle.haven.domain.usecase.GetRandomBackgroundImageUseCase
 import com.github.iscle.haven.domain.usecase.GetWeatherUseCase
+import com.github.iscle.haven.domain.usecase.SetPinnedImageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,7 +30,9 @@ data class HomeUiState(
     val weather: Weather? = null,
     val isLoadingBackground: Boolean = false,
     val isLoadingWeather: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val preferences: AppPreferences = AppPreferences(),
+    val notifications: List<HavenNotification> = emptyList()
 )
 
 @HiltViewModel
@@ -32,7 +40,11 @@ class HomeViewModel @Inject constructor(
     private val getRandomBackgroundImageUseCase: GetRandomBackgroundImageUseCase,
     private val getWeatherUseCase: GetWeatherUseCase,
     private val getBackgroundIntervalUseCase: GetBackgroundIntervalUseCase,
-    private val getCityNameUseCase: GetCityNameUseCase
+    private val getCityNameUseCase: GetCityNameUseCase,
+    private val getAppPreferencesUseCase: GetAppPreferencesUseCase,
+    private val getAllowedNotificationsUseCase: GetAllowedNotificationsUseCase,
+    private val getPinnedImageUseCase: GetPinnedImageUseCase,
+    private val setPinnedImageUseCase: SetPinnedImageUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -47,6 +59,9 @@ class HomeViewModel @Inject constructor(
     init {
         Timber.d("HomeViewModel: Initializing")
         observeCityName()
+        observePreferences()
+        observeNotifications()
+        observePinnedImage()
         loadBackgroundImage()
         observeBackgroundInterval()
         startWeatherRefresh()
@@ -63,6 +78,43 @@ class HomeViewModel @Inject constructor(
                         loadWeatherForCity(city)
                     }
                 }
+            }
+        }
+    }
+
+    private fun observePreferences() {
+        viewModelScope.launch {
+            Timber.d("HomeViewModel: Observing display preferences")
+            getAppPreferencesUseCase().collect { preferences ->
+                _uiState.update { it.copy(preferences = preferences) }
+            }
+        }
+    }
+
+    private fun observeNotifications() {
+        viewModelScope.launch {
+            Timber.d("HomeViewModel: Observing allowed notifications")
+            getAllowedNotificationsUseCase().collect { notifications ->
+                Timber.d("HomeViewModel: ${notifications.size} allowed notifications on the clock")
+                _uiState.update { it.copy(notifications = notifications) }
+            }
+        }
+    }
+
+    /**
+     * "Show on clock now" from the history details pane writes a pinned image;
+     * show it straight away, restart the rotation so it stays for a full
+     * interval, then clear the pin so it is not restored on the next launch.
+     */
+    private fun observePinnedImage() {
+        viewModelScope.launch {
+            Timber.d("HomeViewModel: Observing pinned image")
+            getPinnedImageUseCase().collect { pinned ->
+                if (pinned == null) return@collect
+                Timber.i("HomeViewModel: Showing pinned image: id=${pinned.id}")
+                _uiState.update { it.copy(backgroundImage = pinned, errorMessage = null) }
+                startBackgroundRotation()
+                setPinnedImageUseCase(null)
             }
         }
     }
@@ -110,11 +162,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             Timber.d("HomeViewModel: Loading background image")
             _uiState.update { it.copy(isLoadingBackground = true) }
-            
+
             getRandomBackgroundImageUseCase().fold(
                 onSuccess = { image ->
                     Timber.i("HomeViewModel: Background image loaded successfully: id=${image.id}, photographer=${image.photographer}")
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             backgroundImage = image,
                             isLoadingBackground = false,
@@ -151,10 +203,10 @@ class HomeViewModel @Inject constructor(
                 }
                 return@launch
             }
-            
+
             Timber.d("HomeViewModel: Loading weather for city: $city")
             _uiState.update { it.copy(isLoadingWeather = true) }
-            
+
             getWeatherUseCase(city).fold(
                 onSuccess = { weather ->
                     Timber.i("HomeViewModel: Weather loaded successfully: city=${weather.cityName}, temp=${weather.temperature}°C")
@@ -192,4 +244,3 @@ class HomeViewModel @Inject constructor(
         weatherJob?.cancel()
     }
 }
-

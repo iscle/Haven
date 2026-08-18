@@ -1,7 +1,10 @@
 package com.github.iscle.haven.presentation.history
 
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,10 +12,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -23,108 +28,88 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.github.iscle.haven.domain.model.WallpaperHistory
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.github.iscle.haven.presentation.common.FlatIconButton
+import com.github.iscle.haven.presentation.common.HavenFilledButton
+import com.github.iscle.haven.presentation.common.HavenOutlinedButton
+import com.github.iscle.haven.presentation.common.SegmentedToggle
+import com.github.iscle.haven.presentation.common.formatDateTime
+import com.github.iscle.haven.presentation.common.formatShortDate
+import com.github.iscle.haven.ui.theme.HavenHeart
+import com.github.iscle.haven.ui.theme.HavenOnSurface
+import com.github.iscle.haven.ui.theme.HavenOnSurfaceMuted
+import com.github.iscle.haven.ui.theme.HavenSurface
+import com.github.iscle.haven.ui.theme.HavenSurfacePanel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     onNavigateBack: () -> Unit,
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true
-    )
+    val context = LocalContext.current
+    val selected = uiState.selectedImage
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Wallpaper History") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                }
+    // Leave only once the pinned wallpaper has actually been stored.
+    LaunchedEffect(uiState.clockUpdated) {
+        if (uiState.clockUpdated) onNavigateBack()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(HavenSurface)
+            .safeDrawingPadding()
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            HistoryHeader(
+                filter = uiState.filter,
+                showFilter = uiState.history.isNotEmpty(),
+                onSelectFilter = viewModel::setFilter,
+                onNavigateBack = onNavigateBack
             )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            if (uiState.history.isEmpty() && !uiState.isLoading) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "No history yet",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Wallpapers you've seen will appear here",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                }
+
+            val visible = uiState.visibleHistory
+            if (visible.isEmpty() && !uiState.isLoading) {
+                EmptyHistory(filter = uiState.filter)
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 180.dp),
+                    columns = GridCells.Fixed(5),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(
-                        items = uiState.history,
-                        key = { it.image.id }
-                    ) { history ->
+                    items(items = visible, key = { it.image.id }) { history ->
                         HistoryGridItem(
                             history = history,
                             onClick = { viewModel.showDetails(history) },
@@ -133,380 +118,422 @@ fun HistoryScreen(
                     }
                 }
             }
+        }
 
-            // Details bottom sheet
-            if (uiState.showDetails && uiState.selectedImage != null) {
-                val context = LocalContext.current
-                ModalBottomSheet(
-                    onDismissRequest = { viewModel.hideDetails() },
-                    sheetState = sheetState
-                ) {
-                    ImageDetailsSheet(
-                        history = uiState.selectedImage!!,
-                        onFavoriteClick = { viewModel.toggleFavorite(uiState.selectedImage!!.image.id) },
-                        onDismiss = { viewModel.hideDetails() },
-                        onOpenUnsplash = { url ->
-                            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                            context.startActivity(intent)
-                        },
-                        onOpenArtistProfile = { url ->
-                            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                            context.startActivity(intent)
-                        }
-                    )
-                }
-            }
+        // 2D — on a landscape display the details sheet is a side sheet.
+        if (uiState.showDetails && selected != null) {
+            PhotoDetails(
+                history = selected,
+                onDismiss = viewModel::hideDetails,
+                onFavoriteClick = { viewModel.toggleFavorite(selected.image.id) },
+                onShowOnClock = { viewModel.showOnClock(selected.image) },
+                onOpenUnsplash = { url -> openUrl(context, url) },
+                onOpenArtistProfile = { url -> openUrl(context, url) }
+            )
         }
     }
 }
 
 @Composable
-fun HistoryGridItem(
+private fun HistoryHeader(
+    filter: HistoryFilter,
+    showFilter: Boolean,
+    onSelectFilter: (HistoryFilter) -> Unit,
+    onNavigateBack: () -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 40.dp, end = 40.dp, top = 28.dp, bottom = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                FlatIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    onClick = onNavigateBack
+                )
+                Text(
+                    text = "Wallpaper History",
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.34.sp,
+                    color = HavenOnSurface
+                )
+            }
+            if (showFilter) {
+                SegmentedToggle(
+                    options = listOf("All", "Favorites"),
+                    selectedIndex = if (filter == HistoryFilter.ALL) 0 else 1,
+                    onSelect = { index ->
+                        onSelectFilter(if (index == 0) HistoryFilter.ALL else HistoryFilter.FAVORITES)
+                    }
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.07f))
+        )
+    }
+}
+
+/** 2C — the empty state, copy unchanged from the original screen. */
+@Composable
+private fun EmptyHistory(filter: HistoryFilter) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Image,
+            contentDescription = null,
+            tint = HavenOnSurface.copy(alpha = 0.18f),
+            modifier = Modifier
+                .size(76.dp)
+                .padding(bottom = 14.dp)
+        )
+        Text(
+            text = if (filter == HistoryFilter.FAVORITES) "No favorites yet" else "No history yet",
+            fontSize = 40.sp,
+            fontWeight = FontWeight.Medium,
+            color = HavenOnSurface.copy(alpha = 0.6f)
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = if (filter == HistoryFilter.FAVORITES) {
+                "Wallpapers you favourite will appear here"
+            } else {
+                "Wallpapers you've seen will appear here"
+            },
+            fontSize = 22.sp,
+            color = HavenOnSurface.copy(alpha = 0.42f)
+        )
+    }
+}
+
+@Composable
+private fun HistoryGridItem(
     history: WallpaperHistory,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit
 ) {
-    Card(
-        onClick = onClick,
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(0.75f),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            .aspectRatio(0.75f)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Image
+        AsyncImage(
+            model = history.image.url,
+            contentDescription = history.image.photographer,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.4f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.7f)
+                        )
+                    )
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+                .size(44.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onFavoriteClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (history.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                contentDescription = if (history.isFavorite) {
+                    "Remove from favorites"
+                } else {
+                    "Add to favorites"
+                },
+                tint = if (history.isFavorite) HavenHeart else Color.White,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = history.image.photographer,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = formatShortDate(history.shownAt),
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.8f)
+            )
+        }
+    }
+}
+
+/** 2D — photo on the left, everything known about it on the right. */
+@Composable
+private fun PhotoDetails(
+    history: WallpaperHistory,
+    onDismiss: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onShowOnClock: () -> Unit,
+    onOpenUnsplash: (String) -> Unit,
+    onOpenArtistProfile: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(HavenSurface)
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
             AsyncImage(
                 model = history.image.url,
-                contentDescription = null,
+                contentDescription = history.image.photographer,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-            
-            // Gradient overlay for better text readability
-            Box(
+            OverlayIconButton(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                onClick = onDismiss,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.7f)
-                            ),
-                            startY = 0f,
-                            endY = Float.POSITIVE_INFINITY
-                        )
-                    )
+                    .align(Alignment.TopStart)
+                    .padding(24.dp)
             )
-            
-            // Favorite button (top right)
-            IconButton(
-                onClick = onFavoriteClick,
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp)
+                    .padding(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Icon(
-                    imageVector = if (history.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = if (history.isFavorite) "Remove from favorites" else "Add to favorites",
-                    tint = if (history.isFavorite) Color.Red else Color.White,
-                    modifier = Modifier.size(24.dp)
+                OverlayIconButton(
+                    icon = if (history.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (history.isFavorite) {
+                        "Remove from favorites"
+                    } else {
+                        "Add to favorites"
+                    },
+                    onClick = onFavoriteClick,
+                    tint = if (history.isFavorite) HavenHeart else Color.White
+                )
+                OverlayIconButton(
+                    icon = Icons.Default.Wallpaper,
+                    contentDescription = "Show on clock now",
+                    onClick = onShowOnClock
                 )
             }
-            
-            // Info overlay (bottom)
-            Column(
+        }
+
+        Column(
+            modifier = Modifier
+                .width(470.dp)
+                .fillMaxHeight()
+                .background(HavenSurfacePanel)
+                .padding(horizontal = 36.dp, vertical = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp)
+        ) {
+            val profileUrl = history.image.artistProfileUrl
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.White.copy(alpha = 0.05f))
+                    .then(
+                        if (!profileUrl.isNullOrBlank()) {
+                            Modifier.clickable { onOpenArtistProfile(profileUrl) }
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = history.image.photographer,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1
+                val profileImage = history.image.profileImageUrl
+                if (!profileImage.isNullOrBlank()) {
+                    AsyncImage(
+                        model = profileImage,
+                        contentDescription = "Photographer",
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = HavenOnSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = history.image.photographer,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HavenOnSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "@${history.image.photographerUsername}",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = HavenOnSurface.copy(alpha = 0.65f)
+                    )
+                }
+                if (!profileUrl.isNullOrBlank()) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "View profile",
+                        tint = HavenOnSurfaceMuted,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.1f))
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                DetailRow(
+                    icon = Icons.Default.Schedule,
+                    text = "Shown on ${formatDateTime(history.shownAt)}"
                 )
-                Text(
-                    text = formatShortDate(history.shownAt),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.8f)
+                DetailRow(
+                    icon = Icons.Default.Visibility,
+                    text = "Shown ${history.timesShown} ${if (history.timesShown == 1) "time" else "times"}"
+                )
+                DetailRow(
+                    icon = if (history.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    text = if (history.isFavorite) "In favorites" else "Not in favorites"
                 )
             }
+
+            Spacer(Modifier.weight(1f))
+
+            val unsplashUrl = history.image.unsplashUrl
+            if (!unsplashUrl.isNullOrBlank()) {
+                HavenOutlinedButton(
+                    text = "View on Unsplash",
+                    onClick = { onOpenUnsplash(unsplashUrl) },
+                    icon = Icons.Default.Link,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            HavenFilledButton(
+                text = "Show on clock now",
+                onClick = onShowOnClock,
+                icon = Icons.Default.Wallpaper,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
 @Composable
-fun ImageDetailsSheet(
-    history: WallpaperHistory,
-    onFavoriteClick: () -> Unit,
-    onDismiss: () -> Unit,
-    onOpenUnsplash: (String) -> Unit,
-    onOpenArtistProfile: (String) -> Unit
+private fun DetailRow(
+    icon: ImageVector,
+    text: String
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(0.dp),
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Full image with aspect ratio
-        Box(modifier = Modifier.fillMaxWidth()) {
-            AsyncImage(
-                model = history.image.url,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f),
-                contentScale = ContentScale.Crop
-            )
-            
-            // Favorite button overlay on image
-            IconButton(
-                onClick = onFavoriteClick,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .background(
-                        Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-            ) {
-                Icon(
-                    imageVector = if (history.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = null,
-                    tint = if (history.isFavorite) Color.Red else Color.White,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
-
-        // Info section
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Photographer info with profile image (clickable to open artist profile)
-            if (!history.image.artistProfileUrl.isNullOrBlank()) {
-                Card(
-                    onClick = { onOpenArtistProfile(history.image.artistProfileUrl) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Profile image (circular)
-                        if (!history.image.profileImageUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = history.image.profileImageUrl,
-                                contentDescription = "Profile picture",
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            // Placeholder circle if no profile image
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .clip(CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
-                        
-                        // Photographer name and username
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = history.image.photographer,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Text(
-                                text = "@${history.image.photographerUsername}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                        
-                        // Subtle arrow icon to indicate clickability
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "View profile",
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            } else {
-                // Non-clickable version if no profile URL
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Profile image (circular)
-                        if (!history.image.profileImageUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = history.image.profileImageUrl,
-                                contentDescription = "Profile picture",
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant,
-                                        shape = CircleShape
-                                    ),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            // Placeholder circle if no profile image
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant,
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
-                        
-                        // Photographer name and username
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = history.image.photographer,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Text(
-                                text = "@${history.image.photographerUsername}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Divider
-            androidx.compose.material3.Divider(
-                modifier = Modifier.padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-            )
-
-            // Date info
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AccessTime,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Text(
-                    text = "Shown on ${formatDate(history.shownAt)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-            
-            // View count
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Visibility,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Text(
-                    text = "Shown ${history.timesShown} ${if (history.timesShown == 1) "time" else "times"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Open on Unsplash button
-            if (!history.image.unsplashUrl.isNullOrBlank()) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = { onOpenUnsplash(history.image.unsplashUrl) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Link,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "View on Unsplash",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
-
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = HavenOnSurfaceMuted,
+            modifier = Modifier.size(24.dp)
+        )
+        Text(
+            text = text,
+            fontSize = 21.sp,
+            fontWeight = FontWeight.Medium,
+            color = HavenOnSurfaceMuted
+        )
     }
 }
 
-private fun formatDate(timestamp: Long): String {
-    val dateFormat = SimpleDateFormat("MMM dd, yyyy 'at' HH:mm", Locale.getDefault())
-    return dateFormat.format(Date(timestamp))
+@Composable
+private fun OverlayIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = Color.White
+) {
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.42f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(28.dp)
+        )
+    }
 }
 
-private fun formatShortDate(timestamp: Long): String {
-    val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-    return dateFormat.format(Date(timestamp))
+private fun openUrl(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+    } catch (e: ActivityNotFoundException) {
+        // No browser on the device.
+    }
 }
-
