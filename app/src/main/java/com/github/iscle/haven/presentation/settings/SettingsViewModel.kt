@@ -4,16 +4,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.iscle.haven.domain.model.AppPreferences
 import com.github.iscle.haven.domain.model.InstalledApp
+import com.github.iscle.haven.domain.model.PhotoSource
 import com.github.iscle.haven.domain.model.TemperatureUnit
+import com.github.iscle.haven.domain.model.Weather
 import com.github.iscle.haven.domain.usecase.GetAppPreferencesUseCase
 import com.github.iscle.haven.domain.usecase.GetBackgroundIntervalUseCase
 import com.github.iscle.haven.domain.usecase.GetCityNameUseCase
 import com.github.iscle.haven.domain.usecase.GetInstalledAppsUseCase
+import com.github.iscle.haven.domain.usecase.GetPhotoSourcesUseCase
+import com.github.iscle.haven.domain.usecase.GetWeatherUseCase
 import com.github.iscle.haven.domain.usecase.SetAdaptiveBrightnessUseCase
+import com.github.iscle.haven.domain.usecase.SetAmbientFollowSunUseCase
+import com.github.iscle.haven.domain.usecase.SetAmbientModeEnabledUseCase
+import com.github.iscle.haven.domain.usecase.SetAmbientScheduleUseCase
 import com.github.iscle.haven.domain.usecase.SetBackgroundIntervalUseCase
 import com.github.iscle.haven.domain.usecase.SetCityNameUseCase
 import com.github.iscle.haven.domain.usecase.SetHideNotificationContentUseCase
-import com.github.iscle.haven.domain.usecase.SetNightModeEnabledUseCase
 import com.github.iscle.haven.domain.usecase.SetNotificationPackageAllowedUseCase
 import com.github.iscle.haven.domain.usecase.SetShowPhotographerCreditUseCase
 import com.github.iscle.haven.domain.usecase.SetShowSecondsUseCase
@@ -23,6 +29,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -32,8 +39,13 @@ data class SettingsUiState(
     val backgroundIntervalSeconds: Int = 10,
     val cityName: String = "Barcelona",
     val preferences: AppPreferences = AppPreferences(),
-    val apps: List<InstalledApp> = emptyList()
-)
+    val apps: List<InstalledApp> = emptyList(),
+    val photoSources: List<PhotoSource> = emptyList(),
+    /** Only used for the sun times behind the ambient schedule. */
+    val weather: Weather? = null
+) {
+    val enabledPhotoSourceCount: Int get() = photoSources.count { it.enabled }
+}
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -43,7 +55,11 @@ class SettingsViewModel @Inject constructor(
     private val setCityNameUseCase: SetCityNameUseCase,
     private val getAppPreferencesUseCase: GetAppPreferencesUseCase,
     private val getInstalledAppsUseCase: GetInstalledAppsUseCase,
-    private val setNightModeEnabledUseCase: SetNightModeEnabledUseCase,
+    private val getPhotoSourcesUseCase: GetPhotoSourcesUseCase,
+    private val getWeatherUseCase: GetWeatherUseCase,
+    private val setAmbientModeEnabledUseCase: SetAmbientModeEnabledUseCase,
+    private val setAmbientScheduleUseCase: SetAmbientScheduleUseCase,
+    private val setAmbientFollowSunUseCase: SetAmbientFollowSunUseCase,
     private val setAdaptiveBrightnessUseCase: SetAdaptiveBrightnessUseCase,
     private val setShowPhotographerCreditUseCase: SetShowPhotographerCreditUseCase,
     private val setTemperatureUnitUseCase: SetTemperatureUnitUseCase,
@@ -60,6 +76,8 @@ class SettingsViewModel @Inject constructor(
         Timber.d("SettingsViewModel: Initializing")
         loadSettings()
         loadApps()
+        loadPhotoSources()
+        loadSunTimes()
     }
 
     private fun loadSettings() {
@@ -95,6 +113,26 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private fun loadPhotoSources() {
+        viewModelScope.launch {
+            getPhotoSourcesUseCase().collect { sources ->
+                _uiState.update { it.copy(photoSources = sources) }
+            }
+        }
+    }
+
+    /** The ambient schedule shows tonight's sunset, so it needs the forecast. */
+    private fun loadSunTimes() {
+        viewModelScope.launch {
+            val city = getCityNameUseCase().first()
+            if (city.isBlank()) return@launch
+            getWeatherUseCase(city).fold(
+                onSuccess = { weather -> _uiState.update { it.copy(weather = weather) } },
+                onFailure = { error -> Timber.w(error, "SettingsViewModel: No sun times available") }
+            )
+        }
+    }
+
     fun setBackgroundInterval(seconds: Int) {
         Timber.i("SettingsViewModel: Setting background interval: $seconds seconds")
         viewModelScope.launch { setBackgroundIntervalUseCase(seconds) }
@@ -105,8 +143,17 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { setCityNameUseCase(city) }
     }
 
-    fun setNightModeEnabled(enabled: Boolean) {
-        viewModelScope.launch { setNightModeEnabledUseCase(enabled) }
+    fun setAmbientModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { setAmbientModeEnabledUseCase(enabled) }
+    }
+
+    fun setAmbientSchedule(startMinutes: Int, endMinutes: Int) {
+        Timber.i("SettingsViewModel: Ambient window $startMinutes -> $endMinutes")
+        viewModelScope.launch { setAmbientScheduleUseCase(startMinutes, endMinutes) }
+    }
+
+    fun setAmbientFollowSun(enabled: Boolean) {
+        viewModelScope.launch { setAmbientFollowSunUseCase(enabled) }
     }
 
     fun setAdaptiveBrightness(enabled: Boolean) {

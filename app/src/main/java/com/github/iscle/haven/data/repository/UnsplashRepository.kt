@@ -6,6 +6,8 @@ import com.github.iscle.haven.data.remote.UnsplashApiService
 import com.github.iscle.haven.data.remote.model.UnsplashPhoto
 import com.github.iscle.haven.data.remote.model.UnsplashSearchResponse
 import com.github.iscle.haven.domain.model.BackgroundImage
+import com.github.iscle.haven.domain.model.PhotoSource
+import com.github.iscle.haven.domain.model.PhotoSourceType
 import com.github.iscle.haven.domain.model.WallpaperHistory
 import kotlinx.coroutines.flow.Flow
 import timber.log.Timber
@@ -21,6 +23,9 @@ class UnsplashRepositoryImpl @Inject constructor(
 ) : UnsplashRepositoryInterface {
     companion object {
         private const val MAX_PAGE_RETRIES = 5
+        private const val COLLECTION_PAGE_SIZE = 20
+
+        fun collectionCacheKey(collectionId: String): String = "collection:$collectionId"
     }
 
     override suspend fun getRandomPhoto(
@@ -51,6 +56,75 @@ class UnsplashRepositoryImpl @Inject constructor(
         return fetchAndCachePhotos(query)
     }
     
+    override suspend fun getRandomPhotoForSource(source: PhotoSource): Result<BackgroundImage> {
+        Timber.d("Repository: Getting a photo for source ${source.type} '${source.label}'")
+        return when (source.type) {
+            PhotoSourceType.UNSPLASH_QUERY -> getRandomPhoto(
+                query = source.value,
+                includeFavorites = false
+            )
+
+            PhotoSourceType.UNSPLASH_COLLECTION -> getRandomCollectionPhoto(source.value)
+
+            PhotoSourceType.FAVORITES -> {
+                val favorite = historyDataSource.getFavorites().randomOrNull()
+                if (favorite == null) {
+                    Result.failure(IllegalStateException("No favorites yet"))
+                } else {
+                    Result.success(favorite)
+                }
+            }
+
+            PhotoSourceType.DEVICE -> Result.success(
+                BackgroundImage(
+                    id = source.id,
+                    url = source.value,
+                    photographer = source.label,
+                    photographerUsername = ""
+                )
+            )
+        }
+    }
+
+    override suspend fun getCollectionInfo(collectionId: String): Result<Pair<String, Int>> =
+        unsplashApiService.getCollection(collectionId).map { it.title to it.totalPhotos }
+
+    /** Collections are paged like search, and cached under their own key. */
+    private suspend fun getRandomCollectionPhoto(collectionId: String): Result<BackgroundImage> {
+        val cacheKey = collectionCacheKey(collectionId)
+        photoCacheDataSource.getRandomCachedPhoto(cacheKey)?.let { cached ->
+            Timber.d("Repository: Using cached collection photo: id=${cached.id}")
+            return Result.success(cached)
+        }
+
+        val info = unsplashApiService.getCollection(collectionId).getOrNull()
+        val totalPhotos = info?.totalPhotos ?: 0
+        val pages = if (totalPhotos > 0) {
+            ((totalPhotos + COLLECTION_PAGE_SIZE - 1) / COLLECTION_PAGE_SIZE).coerceAtMost(50)
+        } else {
+            1
+        }
+
+        repeat(MAX_PAGE_RETRIES) {
+            val page = (1..pages).random()
+            val photos = unsplashApiService
+                .getCollectionPhotos(collectionId, page = page, perPage = COLLECTION_PAGE_SIZE)
+                .getOrNull()
+                ?.filter { it.width > it.height }
+                ?.map(::mapToDomainModel)
+                .orEmpty()
+
+            if (photos.isNotEmpty()) {
+                photoCacheDataSource.cachePhotos(cacheKey, photos)
+                return Result.success(photos.random())
+            }
+        }
+
+        return Result.failure(
+            IllegalStateException("No landscape photos in collection $collectionId")
+        )
+    }
+
     override suspend fun addToHistory(image: BackgroundImage) {
         historyDataSource.addToHistory(image)
     }

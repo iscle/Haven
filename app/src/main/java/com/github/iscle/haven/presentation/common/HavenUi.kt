@@ -1,5 +1,10 @@
 package com.github.iscle.haven.presentation.common
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +47,15 @@ import com.github.iscle.haven.ui.theme.HavenOnSurface
 import com.github.iscle.haven.ui.theme.HavenOnSurfaceFaint
 import com.github.iscle.haven.ui.theme.HavenOnSurfaceMuted
 import com.github.iscle.haven.ui.theme.RajdhaniFontFamily
+
+/** Shared motion timings, so every control moves at the same speed. */
+object HavenMotion {
+    /** Switches, segmented pills and other small controls. */
+    const val CONTROL_MILLIS = 180
+
+    /** Screens and panes trading places. */
+    const val SCREEN_MILLIS = 260
+}
 
 /**
  * A pane that sits on top of the photo. The design calls for backdrop blur;
@@ -156,20 +172,41 @@ fun HavenSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) HavenAccent else Color.White.copy(alpha = 0.16f),
+        animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+        label = "switch_track"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) HavenInk else Color.White.copy(alpha = 0.7f),
+        animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+        label = "switch_thumb"
+    )
+    // 68dp wide, 5dp padding, 28dp thumb — 30dp of travel.
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 30.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "switch_thumb_offset"
+    )
+
     Box(
         modifier = modifier
             .size(width = 68.dp, height = 38.dp)
             .clip(CircleShape)
-            .background(if (checked) HavenAccent else Color.White.copy(alpha = 0.16f))
+            .background(trackColor)
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 5.dp),
-        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
+        contentAlignment = Alignment.CenterStart
     ) {
         Box(
             modifier = Modifier
+                .offset(x = thumbOffset)
                 .size(28.dp)
                 .clip(CircleShape)
-                .background(if (checked) HavenInk else Color.White.copy(alpha = 0.7f))
+                .background(thumbColor)
         )
     }
 }
@@ -198,10 +235,20 @@ fun SegmentedToggle(
     ) {
         options.forEachIndexed { index, option ->
             val selected = index == selectedIndex
+            val pillColor by animateColorAsState(
+                targetValue = if (selected) Color.White.copy(alpha = 0.9f) else Color.Transparent,
+                animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+                label = "segment_pill"
+            )
+            val labelColor by animateColorAsState(
+                targetValue = if (selected) HavenInk else HavenOnSurfaceMuted,
+                animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+                label = "segment_label"
+            )
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(if (selected) Color.White.copy(alpha = 0.9f) else Color.Transparent)
+                    .background(pillColor)
                     .clickable { onSelect(index) }
                     .padding(horizontal = horizontalPadding, vertical = verticalPadding)
             ) {
@@ -210,7 +257,7 @@ fun SegmentedToggle(
                     fontSize = fontSize,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     fontFamily = RajdhaniFontFamily,
-                    color = if (selected) HavenInk else HavenOnSurfaceMuted,
+                    color = labelColor,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -265,6 +312,8 @@ fun HavenOutlinedButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     height: Dp = 64.dp,
+    horizontalPadding: Dp = 24.dp,
+    cornerRadius: Dp = 16.dp,
     border: BorderStroke = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
     contentColor: Color = HavenOnSurface,
     dashed: Boolean = false
@@ -272,14 +321,14 @@ fun HavenOutlinedButton(
     Row(
         modifier = modifier
             .height(height)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(cornerRadius))
             .border(
                 width = border.width,
                 brush = border.brush,
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(cornerRadius)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = horizontalPadding),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -297,7 +346,9 @@ fun HavenOutlinedButton(
             fontSize = if (dashed) 21.sp else 22.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = RajdhaniFontFamily,
-            color = contentColor
+            color = contentColor,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

@@ -21,7 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import com.github.iscle.haven.domain.model.AppPreferences
 import com.github.iscle.haven.domain.model.TemperatureUnit
+import com.github.iscle.haven.domain.model.Weather
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.text.SimpleDateFormat
@@ -106,14 +108,52 @@ fun temperatureIn(celsius: Double, unit: TemperatureUnit): Double = when (unit) 
     TemperatureUnit.FAHRENHEIT -> celsius * 9.0 / 5.0 + 32.0
 }
 
-const val NIGHT_MODE_START_HOUR = 23
-const val NIGHT_MODE_END_HOUR = 7
+/** Minutes past midnight, local time. */
+fun minutesOfDay(timeMillis: Long): Int {
+    val calendar = Calendar.getInstance().apply { timeInMillis = timeMillis }
+    return calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+}
 
-/** True inside the night-mode window the design describes: 23:00 to 07:00. */
-fun isWithinNightWindow(timeMillis: Long): Boolean {
-    val hour = Calendar.getInstance().apply { timeInMillis = timeMillis }
-        .get(Calendar.HOUR_OF_DAY)
-    return hour >= NIGHT_MODE_START_HOUR || hour < NIGHT_MODE_END_HOUR
+fun formatMinutesOfDay(minutes: Int, use24Hour: Boolean = true): String {
+    val hour = (minutes / 60) % 24
+    val minute = minutes % 60
+    return if (use24Hour) {
+        String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
+    } else {
+        val suffix = if (hour < 12) "AM" else "PM"
+        val displayHour = when (hour % 12) {
+            0 -> 12
+            else -> hour % 12
+        }
+        String.format(Locale.getDefault(), "%d:%02d %s", displayHour, minute, suffix)
+    }
+}
+
+/**
+ * The ambient window in minutes past midnight. When the schedule follows the
+ * sun it runs sunset to sunrise, otherwise it uses the times the user picked.
+ */
+fun ambientWindow(
+    preferences: AppPreferences,
+    weather: Weather?
+): Pair<Int, Int> {
+    if (preferences.ambientFollowSun) {
+        val sunset = weather?.sunsetMillis?.let(::minutesOfDay)
+        val sunrise = weather?.sunriseMillis?.let(::minutesOfDay)
+        if (sunset != null && sunrise != null) return sunset to sunrise
+    }
+    return preferences.ambientStartMinutes to preferences.ambientEndMinutes
+}
+
+/** True inside the ambient window, which normally wraps past midnight. */
+fun isWithinAmbientWindow(timeMillis: Long, startMinutes: Int, endMinutes: Int): Boolean {
+    if (startMinutes == endMinutes) return false
+    val now = minutesOfDay(timeMillis)
+    return if (startMinutes < endMinutes) {
+        now >= startMinutes && now < endMinutes
+    } else {
+        now >= startMinutes || now < endMinutes
+    }
 }
 
 /** WMO weather code to the closest available Material icon. */

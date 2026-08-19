@@ -22,18 +22,24 @@ Android launcher — any always-on landscape display will do.
 | --- | --- |
 | ![Drawer search](docs/screenshots/app-search.webp) | ![Wallpaper history](docs/screenshots/history.webp) |
 
-| Photo details | Settings |
+| Photo details | Display settings |
 | --- | --- |
 | ![Photo details](docs/screenshots/photo-details.webp) | ![Display settings](docs/screenshots/settings-display.webp) |
+
+| Photo sources | Ambient schedule |
+| --- | --- |
+| ![Photo sources](docs/screenshots/photo-source.webp) | ![Ambient schedule](docs/screenshots/ambient-schedule.webp) |
 
 ## What it does
 
 - **Clock** — 24-hour or 12-hour, optional seconds, tabular figures, readable across a room.
 - **Weather** — current conditions, apparent temperature and a 12-hour forecast strip from
   [Open-Meteo](https://open-meteo.com), geocoded from a city name. No API key.
-- **Wallpaper** — landscape photos from Unsplash on an interval you choose (10s – 24h),
-  pre-loaded and cross-faded so the clock never flashes black. Photographer credit on screen,
-  as the Unsplash terms require.
+- **Wallpaper** — landscape photos on an interval you choose (10s – 24h), pre-loaded and
+  cross-faded so the clock never flashes black. Photographer credit on screen, as the
+  Unsplash terms require.
+- **Photo sources** — mix Unsplash searches, whole collections (paste the URL), your
+  favourites, and photos from the device; Haven shuffles across everything switched on.
 - **History and favourites** — every wallpaper you have seen, kept in Room, with a favourites
   filter, a details pane, and *Show on clock now* to pin one back onto the clock.
 - **App drawer** — every launchable app, alphabetical, twelve per page, reachable by swiping
@@ -41,8 +47,9 @@ Android launcher — any always-on landscape display will do.
 - **Notifications** — an allow-list, so a clock in a kitchen shows the parcel and the message
   from Anna and nothing else. Content can be hidden to sender-only, and the whole stack
   disappears in ambient mode.
-- **Ambient mode** — from 23:00 to 07:00 the photo dims to a trace and the clock turns warm
-  and dim. One tap brings the day layout back for twenty seconds.
+- **Ambient mode** — overnight the photo dims to a trace and the clock turns warm and dim.
+  Pick the hours yourself, or let the window follow real sunset and sunrise for your city.
+  One tap brings the day layout back for twenty seconds.
 
 ## Getting started
 

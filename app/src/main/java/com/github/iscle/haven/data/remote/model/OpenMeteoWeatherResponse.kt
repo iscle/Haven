@@ -10,7 +10,16 @@ data class OpenMeteoWeatherResponse(
     @SerialName("current_weather")
     val currentWeather: CurrentWeather,
     @SerialName("hourly")
-    val hourly: HourlyWeather? = null
+    val hourly: HourlyWeather? = null,
+    @SerialName("daily")
+    val daily: DailyWeather? = null
+)
+
+@Serializable
+data class DailyWeather(
+    val time: List<String>? = null,
+    val sunrise: List<String>? = null,
+    val sunset: List<String>? = null
 )
 
 @Serializable

@@ -4,6 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -65,6 +68,7 @@ import com.github.iscle.haven.domain.model.InstalledApp
 import com.github.iscle.haven.domain.model.Weather
 import com.github.iscle.haven.presentation.common.AppIconTile
 import com.github.iscle.haven.presentation.common.FlatIconButton
+import com.github.iscle.haven.presentation.common.HavenMotion
 import com.github.iscle.haven.presentation.common.SectionLabel
 import com.github.iscle.haven.presentation.common.formatClock
 import com.github.iscle.haven.presentation.common.formatTemperature
@@ -336,13 +340,20 @@ private fun DrawerFooter(
         ) {
             repeat(pageCount.coerceAtLeast(1)) { index ->
                 val active = index == pageIndex
+                val dotWidth by animateDpAsState(
+                    targetValue = if (active) 34.dp else 8.dp,
+                    animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+                    label = "page_dot_width"
+                )
+                val dotColor by animateColorAsState(
+                    targetValue = Color.White.copy(alpha = if (active) 0.85f else 0.3f),
+                    animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+                    label = "page_dot_colour"
+                )
                 Box(
                     modifier = Modifier
-                        .size(width = if (active) 34.dp else 8.dp, height = 8.dp)
-                        .background(
-                            color = Color.White.copy(alpha = if (active) 0.85f else 0.3f),
-                            shape = CircleShape
-                        )
+                        .size(width = dotWidth, height = 8.dp)
+                        .background(color = dotColor, shape = CircleShape)
                 )
             }
         }
@@ -453,7 +464,11 @@ private fun AppSearchPane(
                     )
                 }
                 items(items = results, key = { it.packageName }) { app ->
-                    AppResultRow(app = app, onClick = { onLaunchApp(app) })
+                    AppResultRow(
+                        app = app,
+                        onClick = { onLaunchApp(app) },
+                        modifier = Modifier.animateItem()
+                    )
                 }
                 if (uiState.query.isNotBlank()) {
                     item {
@@ -491,10 +506,11 @@ private fun AppSearchPane(
 @Composable
 private fun AppResultRow(
     app: InstalledApp,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(96.dp)
             .glass(

@@ -1,6 +1,7 @@
 package com.github.iscle.haven.domain.repository
 
 import com.github.iscle.haven.domain.model.BackgroundImage
+import com.github.iscle.haven.domain.model.PhotoSource
 import com.github.iscle.haven.domain.model.WallpaperHistory
 import kotlinx.coroutines.flow.Flow
 
@@ -10,6 +11,12 @@ interface UnsplashRepository {
         includeFavorites: Boolean = true
     ): Result<BackgroundImage>
     
+    /** A wallpaper drawn from one configured source. */
+    suspend fun getRandomPhotoForSource(source: PhotoSource): Result<BackgroundImage>
+
+    /** Title and size of a public Unsplash collection, for the source picker. */
+    suspend fun getCollectionInfo(collectionId: String): Result<Pair<String, Int>>
+
     suspend fun addToHistory(image: BackgroundImage)
     
     fun getHistory(): Flow<List<WallpaperHistory>>

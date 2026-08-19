@@ -13,6 +13,14 @@ data class UnsplashSearchResponse(
 )
 
 @Serializable
+data class UnsplashCollection(
+    val id: String,
+    val title: String,
+    @SerialName("total_photos")
+    val totalPhotos: Int = 0
+)
+
+@Serializable
 data class UnsplashPhoto(
     val id: String,
     val slug: String? = null,

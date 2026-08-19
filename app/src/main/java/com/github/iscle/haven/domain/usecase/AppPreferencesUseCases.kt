@@ -12,11 +12,25 @@ class GetAppPreferencesUseCase @Inject constructor(
     operator fun invoke(): Flow<AppPreferences> = preferencesRepository.appPreferences
 }
 
-class SetNightModeEnabledUseCase @Inject constructor(
+class SetAmbientModeEnabledUseCase @Inject constructor(
     private val preferencesRepository: PreferencesRepository
 ) {
     suspend operator fun invoke(enabled: Boolean) =
-        preferencesRepository.setNightModeEnabled(enabled)
+        preferencesRepository.setAmbientModeEnabled(enabled)
+}
+
+class SetAmbientScheduleUseCase @Inject constructor(
+    private val preferencesRepository: PreferencesRepository
+) {
+    suspend operator fun invoke(startMinutes: Int, endMinutes: Int) =
+        preferencesRepository.setAmbientSchedule(startMinutes, endMinutes)
+}
+
+class SetAmbientFollowSunUseCase @Inject constructor(
+    private val preferencesRepository: PreferencesRepository
+) {
+    suspend operator fun invoke(enabled: Boolean) =
+        preferencesRepository.setAmbientFollowSun(enabled)
 }
 
 class SetAdaptiveBrightnessUseCase @Inject constructor(

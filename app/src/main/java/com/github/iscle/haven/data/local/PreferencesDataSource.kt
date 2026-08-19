@@ -7,8 +7,13 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.github.iscle.haven.data.local.model.PhotoSourceDto
 import com.github.iscle.haven.data.local.model.PinnedImageDto
 import com.github.iscle.haven.domain.model.AppPreferences
+import com.github.iscle.haven.domain.model.DEFAULT_AMBIENT_END_MINUTES
+import com.github.iscle.haven.domain.model.DEFAULT_AMBIENT_START_MINUTES
+import com.github.iscle.haven.domain.model.DEFAULT_PHOTO_SOURCES
+import com.github.iscle.haven.domain.model.PhotoSource
 import com.github.iscle.haven.domain.model.BackgroundImage
 import com.github.iscle.haven.domain.model.TemperatureUnit
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +38,11 @@ class PreferencesDataSource @Inject constructor(
         val WEATHER_API_KEY = stringPreferencesKey("weather_api_key")
 
         val NIGHT_MODE_KEY = booleanPreferencesKey("night_mode_enabled")
+        val AMBIENT_START_KEY = intPreferencesKey("ambient_start_minutes")
+        val AMBIENT_END_KEY = intPreferencesKey("ambient_end_minutes")
+        val AMBIENT_FOLLOW_SUN_KEY = booleanPreferencesKey("ambient_follow_sun")
+        val PHOTO_SOURCES_KEY = stringPreferencesKey("photo_sources")
+        val LAST_PHOTO_SOURCE_KEY = stringPreferencesKey("last_photo_source")
         val ADAPTIVE_BRIGHTNESS_KEY = booleanPreferencesKey("adaptive_brightness")
         val SHOW_CREDIT_KEY = booleanPreferencesKey("show_photographer_credit")
         val TEMPERATURE_UNIT_KEY = stringPreferencesKey("temperature_unit")
@@ -67,7 +77,10 @@ class PreferencesDataSource @Inject constructor(
 
     val appPreferences: Flow<AppPreferences> = dataStore.data.map { preferences ->
         AppPreferences(
-            nightModeEnabled = preferences[NIGHT_MODE_KEY] ?: true,
+            ambientModeEnabled = preferences[NIGHT_MODE_KEY] ?: true,
+            ambientStartMinutes = preferences[AMBIENT_START_KEY] ?: DEFAULT_AMBIENT_START_MINUTES,
+            ambientEndMinutes = preferences[AMBIENT_END_KEY] ?: DEFAULT_AMBIENT_END_MINUTES,
+            ambientFollowSun = preferences[AMBIENT_FOLLOW_SUN_KEY] ?: false,
             adaptiveBrightness = preferences[ADAPTIVE_BRIGHTNESS_KEY] ?: true,
             showPhotographerCredit = preferences[SHOW_CREDIT_KEY] ?: true,
             temperatureUnit = when (preferences[TEMPERATURE_UNIT_KEY]) {
@@ -79,6 +92,22 @@ class PreferencesDataSource @Inject constructor(
             hideNotificationContent = preferences[HIDE_NOTIFICATION_CONTENT_KEY] ?: false,
             allowedNotificationPackages = preferences[ALLOWED_NOTIFICATION_PACKAGES_KEY] ?: emptySet()
         )
+    }
+
+    val photoSources: Flow<List<PhotoSource>> = dataStore.data.map { preferences ->
+        val stored = preferences[PHOTO_SOURCES_KEY]
+        if (stored.isNullOrBlank()) {
+            DEFAULT_PHOTO_SOURCES
+        } else {
+            runCatching {
+                json.decodeFromString<List<PhotoSourceDto>>(stored).map { it.toDomain() }
+            }.onFailure { Timber.w(it, "Failed to read photo sources") }
+                .getOrDefault(DEFAULT_PHOTO_SOURCES)
+        }
+    }
+
+    val lastPhotoSourceId: Flow<String?> = dataStore.data.map { preferences ->
+        preferences[LAST_PHOTO_SOURCE_KEY]
     }
 
     val pinnedImage: Flow<BackgroundImage?> = dataStore.data.map { preferences ->
@@ -119,7 +148,19 @@ class PreferencesDataSource @Inject constructor(
         }
     }
 
-    suspend fun setNightModeEnabled(enabled: Boolean) = putBoolean(NIGHT_MODE_KEY, enabled)
+    suspend fun setAmbientModeEnabled(enabled: Boolean) = putBoolean(NIGHT_MODE_KEY, enabled)
+
+    suspend fun setAmbientFollowSun(enabled: Boolean) = putBoolean(AMBIENT_FOLLOW_SUN_KEY, enabled)
+
+    suspend fun setAmbientSchedule(startMinutes: Int, endMinutes: Int) {
+        withContext(Dispatchers.IO) {
+            Timber.d("Setting ambient window: $startMinutes -> $endMinutes")
+            dataStore.edit { preferences ->
+                preferences[AMBIENT_START_KEY] = startMinutes
+                preferences[AMBIENT_END_KEY] = endMinutes
+            }
+        }
+    }
 
     suspend fun setAdaptiveBrightness(enabled: Boolean) = putBoolean(ADAPTIVE_BRIGHTNESS_KEY, enabled)
 
@@ -154,6 +195,24 @@ class PreferencesDataSource @Inject constructor(
                 } else {
                     current - packageName
                 }
+            }
+        }
+    }
+
+    suspend fun setPhotoSources(sources: List<PhotoSource>) {
+        withContext(Dispatchers.IO) {
+            Timber.d("Saving ${sources.size} photo sources")
+            dataStore.edit { preferences ->
+                preferences[PHOTO_SOURCES_KEY] =
+                    json.encodeToString(sources.map(PhotoSourceDto::fromDomain))
+            }
+        }
+    }
+
+    suspend fun setLastPhotoSourceId(sourceId: String) {
+        withContext(Dispatchers.IO) {
+            dataStore.edit { preferences ->
+                preferences[LAST_PHOTO_SOURCE_KEY] = sourceId
             }
         }
     }

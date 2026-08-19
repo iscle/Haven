@@ -1,5 +1,7 @@
 package com.github.iscle.haven.data.remote
 
+import com.github.iscle.haven.data.remote.model.UnsplashCollection
+import com.github.iscle.haven.data.remote.model.UnsplashPhoto
 import com.github.iscle.haven.data.remote.model.UnsplashSearchResponse
 import com.github.iscle.haven.di.UnsplashClient
 import io.ktor.client.HttpClient
@@ -114,5 +116,37 @@ class UnsplashApiService @Inject constructor(
     }
     
     private class HttpException(val statusCode: Int, message: String) : Exception(message)
-}
 
+    /** Photos in a public collection, e.g. unsplash.com/collections/1053828. */
+    suspend fun getCollectionPhotos(
+        collectionId: String,
+        page: Int,
+        perPage: Int
+    ): Result<List<UnsplashPhoto>> {
+        return try {
+            Timber.d("Fetching Unsplash collection photos: id=$collectionId, page=$page")
+            val photos = client.get("napi/collections/$collectionId/photos") {
+                parameter("page", page)
+                parameter("per_page", perPage)
+            }.body<List<UnsplashPhoto>>()
+            Timber.d("Collection $collectionId returned ${photos.size} photos")
+            Result.success(photos)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to fetch collection photos: id=$collectionId")
+            Result.failure(e)
+        }
+    }
+
+    /** Title and size of a collection, used when the user adds one. */
+    suspend fun getCollection(collectionId: String): Result<UnsplashCollection> {
+        return try {
+            val collection = client.get("napi/collections/$collectionId")
+                .body<UnsplashCollection>()
+            Result.success(collection)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to fetch collection: id=$collectionId")
+            Result.failure(e)
+        }
+    }
+
+}

@@ -3,6 +3,7 @@ package com.github.iscle.haven.data.repository
 import com.github.iscle.haven.data.local.PreferencesDataSource
 import com.github.iscle.haven.domain.model.AppPreferences
 import com.github.iscle.haven.domain.model.BackgroundImage
+import com.github.iscle.haven.domain.model.PhotoSource
 import com.github.iscle.haven.domain.model.TemperatureUnit
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -18,6 +19,8 @@ class PreferencesRepositoryImpl @Inject constructor(
     override val location: Flow<Pair<Double?, Double?>> = preferencesDataSource.location
     override val appPreferences: Flow<AppPreferences> = preferencesDataSource.appPreferences
     override val pinnedImage: Flow<BackgroundImage?> = preferencesDataSource.pinnedImage
+    override val photoSources: Flow<List<PhotoSource>> = preferencesDataSource.photoSources
+    override val lastPhotoSourceId: Flow<String?> = preferencesDataSource.lastPhotoSourceId
 
     override suspend fun setBackgroundInterval(seconds: Int) {
         preferencesDataSource.setBackgroundInterval(seconds)
@@ -31,8 +34,24 @@ class PreferencesRepositoryImpl @Inject constructor(
         preferencesDataSource.setLocation(latitude, longitude)
     }
 
-    override suspend fun setNightModeEnabled(enabled: Boolean) {
-        preferencesDataSource.setNightModeEnabled(enabled)
+    override suspend fun setAmbientModeEnabled(enabled: Boolean) {
+        preferencesDataSource.setAmbientModeEnabled(enabled)
+    }
+
+    override suspend fun setAmbientSchedule(startMinutes: Int, endMinutes: Int) {
+        preferencesDataSource.setAmbientSchedule(startMinutes, endMinutes)
+    }
+
+    override suspend fun setAmbientFollowSun(enabled: Boolean) {
+        preferencesDataSource.setAmbientFollowSun(enabled)
+    }
+
+    override suspend fun setPhotoSources(sources: List<PhotoSource>) {
+        preferencesDataSource.setPhotoSources(sources)
+    }
+
+    override suspend fun setLastPhotoSourceId(sourceId: String) {
+        preferencesDataSource.setLastPhotoSourceId(sourceId)
     }
 
     override suspend fun setAdaptiveBrightness(enabled: Boolean) {

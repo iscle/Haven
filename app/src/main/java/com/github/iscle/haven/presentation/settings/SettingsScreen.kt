@@ -6,6 +6,14 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.AlarmClock
 import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +37,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Alarm
@@ -39,6 +48,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material.icons.filled.WbCloudy
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -71,14 +81,18 @@ import com.github.iscle.haven.domain.model.AppPreferences
 import com.github.iscle.haven.domain.model.InstalledApp
 import com.github.iscle.haven.domain.model.TemperatureUnit
 import com.github.iscle.haven.presentation.apps.AppDrawerActivity
+import com.github.iscle.haven.presentation.photosource.PhotoSourceActivity
 import com.github.iscle.haven.presentation.common.AppIconTile
 import com.github.iscle.haven.presentation.common.FlatIconButton
 import com.github.iscle.haven.presentation.common.HavenFilledButton
+import com.github.iscle.haven.presentation.common.HavenMotion
 import com.github.iscle.haven.presentation.common.HavenOutlinedButton
 import com.github.iscle.haven.presentation.common.HavenSwitch
 import com.github.iscle.haven.presentation.common.SectionLabel
 import com.github.iscle.haven.presentation.common.SegmentedToggle
 import com.github.iscle.haven.presentation.common.SettingsRow
+import com.github.iscle.haven.presentation.common.ambientWindow
+import com.github.iscle.haven.presentation.common.formatMinutesOfDay
 import com.github.iscle.haven.presentation.common.formatTime
 import com.github.iscle.haven.presentation.common.glass
 import com.github.iscle.haven.presentation.common.havenCard
@@ -151,6 +165,7 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedPane by remember { mutableStateOf(initialPane) }
+    var editingAmbientEdge by remember { mutableStateOf<AmbientEdge?>(null) }
 
     Row(
         modifier = Modifier
@@ -172,16 +187,62 @@ fun SettingsScreen(
                 .padding(horizontal = 44.dp, vertical = 38.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            when (selectedPane) {
-                SettingsPane.DISPLAY -> DisplayPane(uiState, viewModel)
-                SettingsPane.WEATHER -> WeatherPane(uiState, viewModel)
-                SettingsPane.CLOCK -> ClockPane(uiState, viewModel)
-                SettingsPane.NOTIFICATIONS -> NotificationsPane(uiState, viewModel)
-                SettingsPane.VOICE -> VoicePane()
-                SettingsPane.APPS -> AppsPane()
-                SettingsPane.ABOUT -> AboutPane()
+            AnimatedContent(
+                targetState = selectedPane,
+                transitionSpec = {
+                    (fadeIn(tween(HavenMotion.SCREEN_MILLIS)) +
+                            slideInVertically(tween(HavenMotion.SCREEN_MILLIS)) { it / 12 })
+                        .togetherWith(fadeOut(tween(HavenMotion.CONTROL_MILLIS)))
+                },
+                label = "settings_pane"
+            ) { pane ->
+                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    when (pane) {
+                        SettingsPane.DISPLAY -> DisplayPane(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            onEditAmbientEdge = { editingAmbientEdge = it }
+                        )
+                        SettingsPane.WEATHER -> WeatherPane(uiState, viewModel)
+                        SettingsPane.CLOCK -> ClockPane(uiState, viewModel)
+                        SettingsPane.NOTIFICATIONS -> NotificationsPane(uiState, viewModel)
+                        SettingsPane.VOICE -> VoicePane()
+                        SettingsPane.APPS -> AppsPane()
+                        SettingsPane.ABOUT -> AboutPane()
+                    }
+                }
             }
         }
+    }
+
+    val edge = editingAmbientEdge
+    if (edge != null) {
+        val preferences = uiState.preferences
+        val (windowStart, windowEnd) = ambientWindow(preferences, uiState.weather)
+        AmbientTimeDialog(
+            edge = edge,
+            initialMinutes = if (edge == AmbientEdge.START) windowStart else windowEnd,
+            followSun = preferences.ambientFollowSun,
+            sunTimeMillis = if (edge == AmbientEdge.START) {
+                uiState.weather?.sunsetMillis
+            } else {
+                uiState.weather?.sunriseMillis
+            },
+            cityName = uiState.cityName,
+            use24Hour = preferences.use24HourClock,
+            onDismiss = { editingAmbientEdge = null },
+            onConfirm = { minutes, followSun ->
+                viewModel.setAmbientFollowSun(followSun)
+                if (!followSun) {
+                    if (edge == AmbientEdge.START) {
+                        viewModel.setAmbientSchedule(minutes, preferences.ambientEndMinutes)
+                    } else {
+                        viewModel.setAmbientSchedule(preferences.ambientStartMinutes, minutes)
+                    }
+                }
+                editingAmbientEdge = null
+            }
+        )
     }
 }
 
@@ -223,14 +284,16 @@ private fun SettingsRail(
 
         SettingsPane.entries.forEach { pane ->
             val selected = pane == selectedPane
+            val railBackground by animateColorAsState(
+                targetValue = if (selected) Color.White.copy(alpha = 0.1f) else Color.Transparent,
+                animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+                label = "rail_selection"
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(60.dp)
-                    .background(
-                        color = if (selected) Color.White.copy(alpha = 0.1f) else Color.Transparent,
-                        shape = RoundedCornerShape(14.dp)
-                    )
+                    .background(color = railBackground, shape = RoundedCornerShape(14.dp))
                     .clickable { onSelectPane(pane) }
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -258,7 +321,8 @@ private fun SettingsRail(
 @Composable
 private fun DisplayPane(
     uiState: SettingsUiState,
-    viewModel: SettingsViewModel
+    viewModel: SettingsViewModel,
+    onEditAmbientEdge: (AmbientEdge) -> Unit
 ) {
     val context = LocalContext.current
     val preferences = uiState.preferences
@@ -363,10 +427,16 @@ private fun DisplayPane(
             .havenCard()
             .padding(horizontal = 28.dp, vertical = 6.dp)
     ) {
+        val sourceCount = uiState.enabledPhotoSourceCount
+        val activeSource = uiState.photoSources.firstOrNull { it.enabled }
         SettingsRow(
             title = "Photo source",
-            subtitle = "Unsplash · $PHOTO_SOURCE_QUERY",
-            onClick = { openUnsplashSource(context) },
+            subtitle = listOfNotNull(
+                "Unsplash",
+                activeSource?.label,
+                "$sourceCount ${if (sourceCount == 1) "source" else "sources"} on"
+            ).joinToString(" · "),
+            onClick = { context.startActivity(Intent(context, PhotoSourceActivity::class.java)) },
             trailing = {
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
@@ -376,19 +446,107 @@ private fun DisplayPane(
                 )
             }
         )
-        SettingsRow(
-            title = "Night mode",
-            subtitle = "Dim the clock and hide the photo from 23:00 to 07:00",
-            trailing = {
+
+        // Ambient mode carries its own schedule, so the row grows a second line.
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 22.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Ambient mode",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = HavenOnSurface
+                    )
+                    Text(
+                        text = "Dim the clock and hide the photo overnight",
+                        fontSize = 18.sp,
+                        color = HavenOnSurfaceFaint
+                    )
+                }
                 HavenSwitch(
-                    checked = preferences.nightModeEnabled,
-                    onCheckedChange = viewModel::setNightModeEnabled
+                    checked = preferences.ambientModeEnabled,
+                    onCheckedChange = viewModel::setAmbientModeEnabled
                 )
             }
-        )
+
+            val (windowStart, windowEnd) = ambientWindow(preferences, uiState.weather)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                AmbientEdgeField(
+                    label = "Starts",
+                    value = formatMinutesOfDay(windowStart, preferences.use24HourClock),
+                    onClick = { onEditAmbientEdge(AmbientEdge.START) },
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = HavenOnSurface.copy(alpha = 0.35f),
+                    modifier = Modifier.size(24.dp)
+                )
+                AmbientEdgeField(
+                    label = "Ends",
+                    value = formatMinutesOfDay(windowEnd, preferences.use24HourClock),
+                    onClick = { onEditAmbientEdge(AmbientEdge.END) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            // At this type size the sun shortcut cannot share the row with the
+            // times, so it spans the block beneath them and lines up with both.
+            HavenOutlinedButton(
+                text = if (preferences.ambientFollowSun) {
+                    "Following sunset → sunrise"
+                } else {
+                    "Use sunset → sunrise"
+                },
+                onClick = { viewModel.setAmbientFollowSun(!preferences.ambientFollowSun) },
+                icon = Icons.Default.WbTwilight,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 22.dp),
+                height = 56.dp,
+                cornerRadius = 14.dp,
+                border = BorderStroke(
+                    1.dp,
+                    if (preferences.ambientFollowSun) {
+                        HavenAccent
+                    } else {
+                        Color.White.copy(alpha = 0.16f)
+                    }
+                ),
+                contentColor = if (preferences.ambientFollowSun) {
+                    HavenAccent
+                } else {
+                    HavenOnSurfaceMuted
+                }
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.07f))
+            )
+        }
+
         SettingsRow(
             title = "Adaptive brightness",
             subtitle = "Follow the room's light level",
+            showDivider = false,
             trailing = {
                 HavenSwitch(
                     checked = preferences.adaptiveBrightness,
@@ -396,16 +554,46 @@ private fun DisplayPane(
                 )
             }
         )
-        SettingsRow(
-            title = "Show photographer credit",
-            subtitle = "Required by the Unsplash API terms",
-            showDivider = false,
-            trailing = {
-                HavenSwitch(
-                    checked = preferences.showPhotographerCredit,
-                    onCheckedChange = viewModel::setShowPhotographerCredit
-                )
-            }
+    }
+}
+
+/** One end of the ambient window, styled as a read-only field that opens 2J. */
+@Composable
+private fun AmbientEdgeField(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .height(64.dp)
+            .glass(
+                shape = RoundedCornerShape(14.dp),
+                fill = Color.Black.copy(alpha = 0.24f),
+                border = Color.White.copy(alpha = 0.14f)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label.uppercase(),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 1.2.sp,
+            color = HavenOnSurfaceFaint,
+            maxLines = 1,
+            softWrap = false
+        )
+        Text(
+            text = value,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = HavenAccent,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

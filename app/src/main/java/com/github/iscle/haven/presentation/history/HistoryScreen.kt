@@ -3,6 +3,12 @@ package com.github.iscle.haven.presentation.history
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,9 +63,11 @@ import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.github.iscle.haven.domain.model.WallpaperHistory
 import com.github.iscle.haven.presentation.common.FlatIconButton
 import com.github.iscle.haven.presentation.common.HavenFilledButton
+import com.github.iscle.haven.presentation.common.HavenMotion
 import com.github.iscle.haven.presentation.common.HavenOutlinedButton
 import com.github.iscle.haven.presentation.common.SegmentedToggle
 import com.github.iscle.haven.presentation.common.formatDateTime
@@ -113,23 +121,32 @@ fun HistoryScreen(
                         HistoryGridItem(
                             history = history,
                             onClick = { viewModel.showDetails(history) },
-                            onFavoriteClick = { viewModel.toggleFavorite(history.image.id) }
+                            onFavoriteClick = { viewModel.toggleFavorite(history.image.id) },
+                            modifier = Modifier.animateItem()
                         )
                     }
                 }
             }
         }
 
-        // 2D — on a landscape display the details sheet is a side sheet.
-        if (uiState.showDetails && selected != null) {
-            PhotoDetails(
+        // 2D — on a landscape display the details sheet is a side sheet, so it
+        // arrives from the right rather than appearing on the spot.
+        AnimatedVisibility(
+            visible = uiState.showDetails && selected != null,
+            enter = fadeIn(tween(HavenMotion.SCREEN_MILLIS)) +
+                    slideInHorizontally(tween(HavenMotion.SCREEN_MILLIS)) { it / 3 },
+            exit = fadeOut(tween(HavenMotion.CONTROL_MILLIS))
+        ) {
+            if (selected != null) {
+                PhotoDetails(
                 history = selected,
                 onDismiss = viewModel::hideDetails,
                 onFavoriteClick = { viewModel.toggleFavorite(selected.image.id) },
                 onShowOnClock = { viewModel.showOnClock(selected.image) },
                 onOpenUnsplash = { url -> openUrl(context, url) },
-                onOpenArtistProfile = { url -> openUrl(context, url) }
-            )
+                    onOpenArtistProfile = { url -> openUrl(context, url) }
+                )
+            }
         }
     }
 }
@@ -226,17 +243,21 @@ private fun EmptyHistory(filter: HistoryFilter) {
 private fun HistoryGridItem(
     history: WallpaperHistory,
     onClick: () -> Unit,
-    onFavoriteClick: () -> Unit
+    onFavoriteClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .aspectRatio(0.75f)
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
     ) {
         AsyncImage(
-            model = history.image.url,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(history.image.url)
+                .crossfade(HavenMotion.SCREEN_MILLIS)
+                .build(),
             contentDescription = history.image.photographer,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
@@ -264,6 +285,11 @@ private fun HistoryGridItem(
                 .clickable(onClick = onFavoriteClick),
             contentAlignment = Alignment.Center
         ) {
+            val heartTint by animateColorAsState(
+                targetValue = if (history.isFavorite) HavenHeart else Color.White,
+                animationSpec = tween(HavenMotion.CONTROL_MILLIS),
+                label = "heart_tint"
+            )
             Icon(
                 imageVector = if (history.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 contentDescription = if (history.isFavorite) {
@@ -271,7 +297,7 @@ private fun HistoryGridItem(
                 } else {
                     "Add to favorites"
                 },
-                tint = if (history.isFavorite) HavenHeart else Color.White,
+                tint = heartTint,
                 modifier = Modifier.size(26.dp)
             )
         }

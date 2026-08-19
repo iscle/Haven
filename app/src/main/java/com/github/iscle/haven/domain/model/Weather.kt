@@ -12,7 +12,10 @@ data class Weather(
     /** True while the sun is up at the observed location. */
     val isDay: Boolean = true,
     /** Upcoming hours used by the forecast strip on the home screen. */
-    val forecast: List<HourlyForecast> = emptyList()
+    val forecast: List<HourlyForecast> = emptyList(),
+    /** Today's sun times, used by the ambient schedule when it follows the sun. */
+    val sunriseMillis: Long? = null,
+    val sunsetMillis: Long? = null
 )
 
 data class HourlyForecast(

@@ -44,6 +44,9 @@
             android:name=".presentation.apps.AppDrawerActivity"
             android:exported="false"
             android:launchMode="singleTop" />
+        <activity
+            android:name=".presentation.photosource.PhotoSourceActivity"
+            android:exported="false" />
 
         <!-- Feeds the notification stack on the clock; the user grants access in
              system settings, there is no runtime permission for it. -->

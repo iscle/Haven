@@ -45,7 +45,9 @@ class WeatherRepositoryImpl @Inject constructor(
                 weatherCode = currentWeather.weatherCode,
                 isDay = currentWeather.isDay?.let { it == 1 }
                     ?: (hourly?.isDay?.getOrNull(nowIndex)?.let { it == 1 } ?: true),
-                forecast = buildForecast(response, nowIndex)
+                forecast = buildForecast(response, nowIndex),
+                sunriseMillis = response.daily?.sunrise?.firstOrNull()?.let(::parseLocalTime),
+                sunsetMillis = response.daily?.sunset?.firstOrNull()?.let(::parseLocalTime)
             )
             Timber.d("Repository: Successfully retrieved weather: city=${weather.cityName}, temp=${weather.temperature}°C, forecast=${weather.forecast.size} steps")
             weather
@@ -87,6 +89,11 @@ class WeatherRepositoryImpl @Inject constructor(
         val index = times.indexOfFirst { it.startsWith(hourPrefix) }
         return if (index >= 0) index else 0
     }
+
+    /** Open-Meteo returns local times like "2026-08-19T20:47" when timezone=auto. */
+    private fun parseLocalTime(value: String): Long? =
+        runCatching { SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US).parse(value)?.time }
+            .getOrNull()
 
     private fun buildForecast(response: OpenMeteoWeatherResponse, nowIndex: Int): List<HourlyForecast> {
         val hourly = response.hourly ?: return emptyList()

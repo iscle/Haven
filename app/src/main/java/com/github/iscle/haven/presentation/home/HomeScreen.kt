@@ -5,10 +5,13 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -71,6 +74,7 @@ import com.github.iscle.haven.domain.model.HavenNotification
 import com.github.iscle.haven.domain.model.Weather
 import com.github.iscle.haven.presentation.apps.AppDrawerActivity
 import com.github.iscle.haven.presentation.common.GlassIconButton
+import com.github.iscle.haven.presentation.common.HavenMotion
 import com.github.iscle.haven.presentation.common.SectionLabel
 import com.github.iscle.haven.presentation.common.formatClock
 import com.github.iscle.haven.presentation.common.formatForecastHour
@@ -79,7 +83,8 @@ import com.github.iscle.haven.presentation.common.formatRelativeTime
 import com.github.iscle.haven.presentation.common.formatTemperature
 import com.github.iscle.haven.presentation.common.formatTime
 import com.github.iscle.haven.presentation.common.glass
-import com.github.iscle.haven.presentation.common.isWithinNightWindow
+import com.github.iscle.haven.presentation.common.ambientWindow
+import com.github.iscle.haven.presentation.common.isWithinAmbientWindow
 import com.github.iscle.haven.presentation.common.rememberAppIcon
 import com.github.iscle.haven.presentation.common.rememberClockTime
 import com.github.iscle.haven.presentation.common.rememberNextAlarmTime
@@ -149,7 +154,10 @@ fun HomeScreen(
         }
     }
     val tick = rememberClockTime(tickEverySecond = preferences.showSeconds)
-    val isNight = preferences.nightModeEnabled && isWithinNightWindow(tick) && !wakeRequested
+    val (ambientStart, ambientEnd) = ambientWindow(preferences, uiState.weather)
+    val isNight = preferences.ambientModeEnabled &&
+            isWithinAmbientWindow(tick, ambientStart, ambientEnd) &&
+            !wakeRequested
     val nextAlarm = rememberNextAlarmTime(tick)
 
     // Adaptive brightness hands the panel back to the system's own light sensor;
@@ -230,7 +238,16 @@ fun HomeScreen(
             }
         }
 
-        if (isNight) {
+        // Day and ambient are two different screens over the same photo, so
+        // they cross-fade rather than snapping at 23:00.
+        Crossfade(
+            targetState = isNight,
+            animationSpec = tween(HavenMotion.SCREEN_MILLIS * 3),
+            label = "ambient_transition",
+            modifier = Modifier.matchParentSize()
+        ) { ambient ->
+        Box(modifier = Modifier.fillMaxSize()) {
+        if (ambient) {
             NightGlow()
             NightClock(
                 timeMillis = tick,
@@ -341,6 +358,8 @@ fun HomeScreen(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 12.dp)
             )
+        }
+        }
         }
     }
 }
@@ -531,10 +550,18 @@ private fun NotificationStack(
         }
 
         visible.forEachIndexed { index, notification ->
-            if (index == 0) {
-                NotificationCard(notification, nowMillis, onReview)
-            } else {
-                CompactNotificationRow(notification, nowMillis, onReview)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(tween(HavenMotion.SCREEN_MILLIS)) +
+                        expandVertically(tween(HavenMotion.SCREEN_MILLIS)),
+                exit = fadeOut(tween(HavenMotion.CONTROL_MILLIS)) +
+                        shrinkVertically(tween(HavenMotion.CONTROL_MILLIS))
+            ) {
+                if (index == 0) {
+                    NotificationCard(notification, nowMillis, onReview)
+                } else {
+                    CompactNotificationRow(notification, nowMillis, onReview)
+                }
             }
         }
 
@@ -575,6 +602,7 @@ private fun NotificationCard(
     nowMillis: Long,
     onClick: () -> Unit
 ) {
+    val hasBody = notification.text.isNotBlank()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -584,9 +612,15 @@ private fun NotificationCard(
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 18.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        // Sender-only cards (content hidden) are a single line: centre them on
+        // the icon rather than leaving the text hanging at the top.
+        verticalAlignment = if (hasBody) Alignment.Top else Alignment.CenterVertically
     ) {
-        NotificationAppIcon(notification, modifier = Modifier.padding(top = 2.dp))
+        NotificationAppIcon(
+            notification = notification,
+            modifier = if (hasBody) Modifier.padding(top = 2.dp) else Modifier
+        )
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -614,7 +648,7 @@ private fun NotificationCard(
                     modifier = Modifier.alignByBaseline()
                 )
             }
-            if (notification.text.isNotBlank()) {
+            if (hasBody) {
                 Text(
                     text = notification.text,
                     fontSize = 19.sp,
