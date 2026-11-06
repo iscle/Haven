@@ -103,13 +103,21 @@ app/src/main/java/com/github/iscle/haven/
 | --- | --- |
 | UI | Jetpack Compose, Material 3 |
 | DI | Hilt |
-| Networking | Ktor + kotlinx.serialization |
+| Networking | WebView for Unsplash; Ktor for weather; kotlinx.serialization |
 | Storage | Room (history, photo cache), DataStore (preferences) |
 | Images | Coil |
 | Logging | Timber |
 
-Wallpapers come from Unsplash's public search endpoint and weather from Open-Meteo, so there
-are no keys to configure.
+Wallpapers use Unsplash's private website API (`/napi`) through an Android WebView.
+The WebView runs the site's JavaScript browser verification and retains its session cookies;
+no Unsplash API key or alternate photo provider is used. Keep Android System WebView up to
+date. Weather uses Open-Meteo.
+
+The browser transport is separate from response parsing and retry policy. Requests are
+serialized, cancellable, limited to Unsplash's HTTPS origin, and timed out; each WebView is
+destroyed when its request finishes. Cached photo batches are consumed transactionally.
+The home screen holds the decoded wallpaper until the next one is ready and retries failed
+loads automatically.
 
 ## Releases
 
@@ -121,7 +129,22 @@ git tag v1.0.1
 git push origin v1.0.1
 ```
 
-Every push and pull request runs unit tests, lint and a debug build.
+Every push and pull request runs unit tests, lint, a debug build, and offline Android
+regression tests for WebView transport, Room cache transactions, and Compose image loading.
+
+## Testing
+
+```bash
+./gradlew testDebugUnitTest lintDebug assembleDebug
+# With an emulator or device connected:
+./gradlew connectedDebugAndroidTest
+# Optional live test of Unsplash's current browser check and private API:
+./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.havenLiveNetwork=true
+```
+
+The live smoke test is skipped by default so CI does not depend on Unsplash availability.
+Unit tests cover private endpoint parameters, retry/cancellation behavior, source selection,
+cache batching, startup recovery, overlapping requests, and pinned-photo races.
 
 ## Design
 

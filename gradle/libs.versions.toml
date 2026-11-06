@@ -20,8 +20,12 @@ accompanist = "0.36.0"
 googleFonts = "1.9.4"
 timber = "5.0.1"
 ksp = "2.2.21-2.0.4"
+coroutines = "1.10.2"
+mockito = "5.20.0"
 
 [libraries]
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

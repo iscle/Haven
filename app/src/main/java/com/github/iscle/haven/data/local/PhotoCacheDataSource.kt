@@ -3,7 +3,6 @@ package com.github.iscle.haven.data.local
 import com.github.iscle.haven.data.local.database.dao.PhotoCacheDao
 import com.github.iscle.haven.data.local.database.entity.CacheMetadataEntity
 import com.github.iscle.haven.data.local.database.entity.PhotoCacheEntity
-import com.github.iscle.haven.data.local.database.entity.ShownPhotoEntity
 import com.github.iscle.haven.domain.model.BackgroundImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,35 +39,7 @@ class PhotoCacheDataSource @Inject constructor(
                 return@withContext null
             }
             
-            // Get unshown photos directly from database
-            val unshownPhotos = photoCacheDao.getUnshownPhotosByQuery(cacheKey)
-            
-            if (unshownPhotos.isEmpty()) {
-                Timber.d("No unshown photos for query: $query")
-                return@withContext null
-            }
-            
-            // Pick a random unshown photo
-            val randomPhotoEntity = unshownPhotos.random()
-            val randomPhoto = mapToBackgroundImage(randomPhotoEntity)
-            
-            // Mark as shown
-            val shownPhotoEntity = ShownPhotoEntity(
-                id = "${cacheKey}_${randomPhotoEntity.id}",
-                cacheKey = cacheKey,
-                photoId = randomPhotoEntity.id,
-                shownAt = System.currentTimeMillis()
-            )
-            photoCacheDao.insertShownPhoto(shownPhotoEntity)
-            
-            // Remove photo from cache after showing
-            // Deleting the photo will cascade delete the shown photo record
-            photoCacheDao.deletePhoto(randomPhotoEntity.id, cacheKey)
-            
-            val remainingCount = photoCacheDao.getPhotoCount(cacheKey)
-            Timber.d("Photo cache hit: query=$query, id=${randomPhoto.id}, remaining=$remainingCount")
-            
-            randomPhoto
+            photoCacheDao.takeRandomPhoto(cacheKey)?.let(::mapToBackgroundImage)
         }
     }
 
@@ -100,20 +71,11 @@ class PhotoCacheDataSource @Inject constructor(
             val cacheKey = query.lowercase().trim()
             val cachedAt = System.currentTimeMillis()
             
-            // Delete existing metadata - cascade will automatically delete related photos and shown photos
-            photoCacheDao.deleteCacheMetadata(cacheKey)
-            
-            // Insert new cache metadata first (required for FK constraint)
-            val metadata = CacheMetadataEntity(
-                cacheKey = cacheKey,
-                cachedAt = cachedAt
+            photoCacheDao.replacePhotos(
+                CacheMetadataEntity(cacheKey = cacheKey, cachedAt = cachedAt),
+                photos.map { mapToPhotoCacheEntity(it, cacheKey, cachedAt) }
             )
-            photoCacheDao.insertCacheMetadata(metadata)
-            
-            // Convert to entities and insert photos
-            val photoEntities = photos.map { mapToPhotoCacheEntity(it, cacheKey, cachedAt) }
-            photoCacheDao.insertPhotos(photoEntities)
-            
+
             Timber.d("Cached ${photos.size} photos for query=$query")
         }
     }

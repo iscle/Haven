@@ -3,150 +3,65 @@ package com.github.iscle.haven.data.remote
 import com.github.iscle.haven.data.remote.model.UnsplashCollection
 import com.github.iscle.haven.data.remote.model.UnsplashPhoto
 import com.github.iscle.haven.data.remote.model.UnsplashSearchResponse
-import com.github.iscle.haven.di.UnsplashClient
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.request.parameter
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.isSuccess
+import io.ktor.http.URLBuilder
+import io.ktor.http.appendPathSegments
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import timber.log.Timber
+import kotlinx.serialization.json.Json
 import java.io.IOException
-import java.net.SocketTimeoutException
-import java.util.concurrent.TimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.random.Random
 
 @Singleton
 class UnsplashApiService @Inject constructor(
-    @UnsplashClient private val client: HttpClient
+    private val transport: UnsplashTransport,
+    private val json: Json
 ) {
-    companion object {
-        private const val MAX_RETRIES = 3
-        private const val INITIAL_DELAY_MS = 500L
-        private const val MAX_DELAY_MS = 10000L // 10 seconds max delay
-        private const val JITTER_FACTOR = 0.1 // 10% jitter
-    }
+    suspend fun searchPhotos(query: String, page: Int, perPage: Int): Result<UnsplashSearchResponse> =
+        request(listOf("search", "photos"), mapOf(
+            "plus" to "none",
+            "orientation" to "landscape",
+            "query" to query,
+            "page" to page.toString(),
+            "per_page" to perPage.toString()
+        ))
 
-    suspend fun searchPhotos(
-        query: String,
-        page: Int,
-        perPage: Int
-    ): Result<UnsplashSearchResponse> {
-        var attempt = 0
-        
-        while (attempt <= MAX_RETRIES) {
-            try {
-                Timber.d("Searching Unsplash photos: query=$query, page=$page, perPage=$perPage, attempt=${attempt + 1}/${MAX_RETRIES + 1}")
-                
-                val response = client.get("napi/search/photos") {
-                    parameter("plus", "none")
-                    parameter("page", page)
-                    parameter("per_page", perPage)
-                    parameter("query", query)
-                }
-                
-                // Check HTTP status code before reading body
-                val statusCode = response.status
-                if (statusCode.isSuccess()) {
-                    val body = response.body<UnsplashSearchResponse>()
-                    Timber.d("Unsplash search successful: found ${body.results.size} photos, total=${body.total}, totalPages=${body.totalPages}")
-                    return Result.success(body)
-                } else {
-                    // Non-2xx status code - check if retryable
-                    if (isRetryableError(statusCode)) {
-                        // Retryable error - will retry below
-                        throw HttpException(statusCode.value, "HTTP ${statusCode.value}: ${statusCode.description}")
-                    } else {
-                        // Non-retryable error (4xx except 429)
-                        Timber.e("Non-retryable HTTP error: ${statusCode.value} for query=$query, page=$page")
-                        return Result.failure(HttpException(statusCode.value, "HTTP ${statusCode.value}: ${statusCode.description}"))
-                    }
-                }
-            } catch (e: Exception) {
-                val isRetryable = isRetryableException(e)
-                
-                if (!isRetryable) {
-                    // Non-retryable exception - return immediately
-                    Timber.e(e, "Non-retryable error for Unsplash photos: query=$query, page=$page")
-                    return Result.failure(e)
-                }
-                
-                // If this was the last attempt, return failure
-                if (attempt >= MAX_RETRIES) {
-                    Timber.e(e, "Failed to search Unsplash photos after ${MAX_RETRIES + 1} attempts: query=$query, page=$page")
-                    return Result.failure(e)
-                }
-                
-                // Calculate exponential backoff with jitter
-                val baseDelay = INITIAL_DELAY_MS * (1L shl attempt) // 500ms, 1000ms, 2000ms, 4000ms
-                val delayMs = minOf(baseDelay, MAX_DELAY_MS)
-                val jitter = (delayMs * JITTER_FACTOR * Random.nextDouble(-1.0, 1.0)).toLong()
-                val finalDelay = maxOf(0, delayMs + jitter)
-                
-                attempt++
-                Timber.w("Retryable error (attempt $attempt/${MAX_RETRIES + 1}): ${e.message}. Retrying in ${finalDelay}ms...")
-                delay(finalDelay)
-            }
-        }
-        
-        // Should never reach here, but just in case
-        return Result.failure(IllegalStateException("Failed to search Unsplash photos after ${MAX_RETRIES + 1} attempts"))
-    }
-    
-    private fun isRetryableError(statusCode: HttpStatusCode): Boolean {
-        return when (statusCode.value) {
-            in 500..599 -> true // Server errors
-            429 -> true // Rate limit
-            408 -> true // Request timeout
-            else -> false
-        }
-    }
-    
-    private fun isRetryableException(e: Exception): Boolean {
-        return when (e) {
-            is HttpException -> isRetryableError(HttpStatusCode.fromValue(e.statusCode))
-            is IOException -> true // Network errors
-            is SocketTimeoutException -> true // Timeout errors
-            is TimeoutException -> true // Timeout errors
-            else -> false
-        }
-    }
-    
-    private class HttpException(val statusCode: Int, message: String) : Exception(message)
-
-    /** Photos in a public collection, e.g. unsplash.com/collections/1053828. */
     suspend fun getCollectionPhotos(
         collectionId: String,
         page: Int,
         perPage: Int
-    ): Result<List<UnsplashPhoto>> {
-        return try {
-            Timber.d("Fetching Unsplash collection photos: id=$collectionId, page=$page")
-            val photos = client.get("napi/collections/$collectionId/photos") {
-                parameter("page", page)
-                parameter("per_page", perPage)
-            }.body<List<UnsplashPhoto>>()
-            Timber.d("Collection $collectionId returned ${photos.size} photos")
-            Result.success(photos)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to fetch collection photos: id=$collectionId")
-            Result.failure(e)
-        }
-    }
+    ): Result<List<UnsplashPhoto>> = request(
+        listOf("collections", collectionId, "photos"),
+        mapOf("page" to page.toString(), "per_page" to perPage.toString())
+    )
 
-    /** Title and size of a collection, used when the user adds one. */
-    suspend fun getCollection(collectionId: String): Result<UnsplashCollection> {
-        return try {
-            val collection = client.get("napi/collections/$collectionId")
-                .body<UnsplashCollection>()
-            Result.success(collection)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to fetch collection: id=$collectionId")
-            Result.failure(e)
-        }
-    }
+    suspend fun getCollection(collectionId: String): Result<UnsplashCollection> =
+        request(listOf("collections", collectionId))
 
+    private suspend inline fun <reified T> request(
+        path: List<String>,
+        queryParameters: Map<String, String> = emptyMap()
+    ): Result<T> {
+        val url = URLBuilder("https://unsplash.com/napi/").apply {
+            appendPathSegments(path, encodeSlash = true)
+            queryParameters.forEach { (key, value) -> this.parameters.append(key, value) }
+        }.buildString()
+        repeat(3) { attempt ->
+            try {
+                return Result.success(json.decodeFromString<T>(transport.get(url)))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                val retryable = when (error) {
+                    is UnsplashHttpException -> error.statusCode in 500..599 ||
+                        error.statusCode == 408 || error.statusCode == 429
+                    is IOException -> true
+                    else -> false
+                }
+                if (!retryable || attempt == 2) return Result.failure(error)
+                delay(500L shl attempt)
+            }
+        }
+        error("Retry loop exhausted")
+    }
 }

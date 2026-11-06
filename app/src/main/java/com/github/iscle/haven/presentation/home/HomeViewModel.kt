@@ -15,6 +15,7 @@ import com.github.iscle.haven.domain.usecase.GetRandomBackgroundImageUseCase
 import com.github.iscle.haven.domain.usecase.GetWeatherUseCase
 import com.github.iscle.haven.domain.usecase.SetPinnedImageUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,7 @@ import javax.inject.Inject
 
 data class HomeUiState(
     val backgroundImage: BackgroundImage? = null,
+    val backgroundRequestId: Long = 0,
     val weather: Weather? = null,
     val isLoadingBackground: Boolean = false,
     val isLoadingWeather: Boolean = false,
@@ -51,6 +53,9 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private var backgroundJob: Job? = null
+    private var backgroundLoadJob: Job? = null
+    private var backgroundLoadFailed = false
+    private var awaitingBackgroundDecode = false
     private var weatherJob: Job? = null
     private var currentIntervalSeconds = 10
     private val weatherRefreshIntervalSeconds = 600L // 10 minutes
@@ -62,6 +67,7 @@ class HomeViewModel @Inject constructor(
         observePreferences()
         observeNotifications()
         observePinnedImage()
+        startBackgroundRotation()
         loadBackgroundImage()
         observeBackgroundInterval()
         startWeatherRefresh()
@@ -112,7 +118,17 @@ class HomeViewModel @Inject constructor(
             getPinnedImageUseCase().collect { pinned ->
                 if (pinned == null) return@collect
                 Timber.i("HomeViewModel: Showing pinned image: id=${pinned.id}")
-                _uiState.update { it.copy(backgroundImage = pinned, errorMessage = null) }
+                backgroundLoadJob?.cancel()
+                backgroundLoadFailed = false
+                awaitingBackgroundDecode = true
+                _uiState.update {
+                    it.copy(
+                        backgroundImage = pinned,
+                        backgroundRequestId = it.backgroundRequestId + 1,
+                        isLoadingBackground = true,
+                        errorMessage = null
+                    )
+                }
                 startBackgroundRotation()
                 setPinnedImageUseCase(null)
             }
@@ -122,7 +138,8 @@ class HomeViewModel @Inject constructor(
     private fun observeBackgroundInterval() {
         viewModelScope.launch {
             Timber.d("HomeViewModel: Observing background interval")
-            getBackgroundIntervalUseCase().collect { intervalSeconds ->
+            getBackgroundIntervalUseCase().collect { storedInterval ->
+                val intervalSeconds = storedInterval.coerceIn(10, 86_400)
                 if (currentIntervalSeconds != intervalSeconds) {
                     Timber.i("HomeViewModel: Background interval changed: ${currentIntervalSeconds}s -> ${intervalSeconds}s")
                     currentIntervalSeconds = intervalSeconds
@@ -137,9 +154,15 @@ class HomeViewModel @Inject constructor(
         Timber.d("HomeViewModel: Starting background rotation with interval: ${currentIntervalSeconds}s")
         backgroundJob = viewModelScope.launch {
             while (true) {
-                delay(currentIntervalSeconds * 1000L)
+                val interval = if (backgroundLoadFailed) {
+                    minOf(currentIntervalSeconds, 30)
+                } else {
+                    currentIntervalSeconds
+                }
+                delay(interval * 1000L)
                 Timber.d("HomeViewModel: Background rotation timer triggered, loading new image")
                 loadBackgroundImage()
+                backgroundLoadJob?.join()
             }
         }
     }
@@ -159,37 +182,57 @@ class HomeViewModel @Inject constructor(
     }
 
     fun loadBackgroundImage() {
-        viewModelScope.launch {
-            Timber.d("HomeViewModel: Loading background image")
+        if (backgroundLoadJob?.isActive == true || awaitingBackgroundDecode) return
+        backgroundLoadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoadingBackground = true) }
-
-            getRandomBackgroundImageUseCase().fold(
-                onSuccess = { image ->
-                    Timber.i("HomeViewModel: Background image loaded successfully: id=${image.id}, photographer=${image.photographer}")
-                    _uiState.update {
-                        it.copy(
-                            backgroundImage = image,
-                            isLoadingBackground = false,
-                            errorMessage = null
-                        )
-                    }
-                    if (backgroundJob == null) {
-                        Timber.d("HomeViewModel: Starting background rotation job")
-                        startBackgroundRotation()
-                    }
-                },
-                onFailure = { error ->
-                    Timber.e(error, "HomeViewModel: Failed to load background image")
-                    _uiState.update {
-                        it.copy(
-                            isLoadingBackground = false,
-                            errorMessage = "Failed to load background: ${error.message}"
-                        )
-                    }
+            try {
+                val image = getRandomBackgroundImageUseCase().getOrThrow()
+                backgroundLoadFailed = false
+                awaitingBackgroundDecode = true
+                _uiState.update {
+                    it.copy(
+                        backgroundImage = image,
+                        backgroundRequestId = it.backgroundRequestId + 1,
+                        errorMessage = null
+                    )
                 }
-            )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                backgroundLoadFailed = true
+                Timber.e(error, "Failed to load background image")
+                _uiState.update {
+                    it.copy(errorMessage = "Failed to load background: ${error.message}")
+                }
+                startBackgroundRotation()
+            } finally {
+                if (!awaitingBackgroundDecode) {
+                    _uiState.update { it.copy(isLoadingBackground = false) }
+                }
+            }
         }
     }
+
+    /** Rotation starts after decoding, so a slow download cannot be replaced mid-flight. */
+    fun onBackgroundImageLoaded(image: BackgroundImage, requestId: Long) {
+        if (!isCurrentBackground(image, requestId)) return
+        awaitingBackgroundDecode = false
+        backgroundLoadFailed = false
+        _uiState.update { it.copy(isLoadingBackground = false) }
+        startBackgroundRotation()
+    }
+
+    /** Keep the current photo visible and retry when its replacement cannot be decoded. */
+    fun onBackgroundImageError(image: BackgroundImage, requestId: Long) {
+        if (!isCurrentBackground(image, requestId)) return
+        awaitingBackgroundDecode = false
+        backgroundLoadFailed = true
+        _uiState.update { it.copy(isLoadingBackground = false) }
+        startBackgroundRotation()
+    }
+
+    private fun isCurrentBackground(image: BackgroundImage, requestId: Long): Boolean =
+        _uiState.value.backgroundImage == image && _uiState.value.backgroundRequestId == requestId
 
     private fun loadWeatherForCity(city: String) {
         viewModelScope.launch {
