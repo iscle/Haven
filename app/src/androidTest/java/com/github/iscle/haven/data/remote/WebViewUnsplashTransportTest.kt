@@ -1,6 +1,8 @@
 package com.github.iscle.haven.data.remote
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -102,7 +104,10 @@ class WebViewUnsplashTransportTest {
                         // Older WebViews do not emit HTTP-error callbacks for intercepted
                         // responses. Deliver the server event explicitly in this fixture.
                         if (response.statusCode >= 400) {
-                            view.post { delegate.onReceivedHttpError(view, request, response) }
+                            // View.post can stay queued forever while this view is unattached.
+                            Handler(Looper.getMainLooper()).post {
+                                delegate.onReceivedHttpError(view, request, response)
+                            }
                         }
                     }
                 override fun onPageFinished(view: WebView, url: String) = delegate.onPageFinished(view, url)
