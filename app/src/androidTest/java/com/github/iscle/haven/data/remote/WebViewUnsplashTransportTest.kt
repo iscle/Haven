@@ -97,7 +97,14 @@ class WebViewUnsplashTransportTest {
     ) : WebView(context) {
         override fun setWebViewClient(delegate: WebViewClient) {
             super.setWebViewClient(object : WebViewClient() {
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest) = respond(request)
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest) =
+                    respond(request).also { response ->
+                        // Older WebViews do not emit HTTP-error callbacks for intercepted
+                        // responses. Deliver the server event explicitly in this fixture.
+                        if (response.statusCode >= 400) {
+                            view.post { delegate.onReceivedHttpError(view, request, response) }
+                        }
+                    }
                 override fun onPageFinished(view: WebView, url: String) = delegate.onPageFinished(view, url)
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) =
                     delegate.shouldOverrideUrlLoading(view, request)
