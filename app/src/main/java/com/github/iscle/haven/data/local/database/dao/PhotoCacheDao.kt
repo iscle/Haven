@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.github.iscle.haven.data.local.database.entity.CacheMetadataEntity
 import com.github.iscle.haven.data.local.database.entity.PhotoCacheEntity
 import com.github.iscle.haven.data.local.database.entity.ShownPhotoEntity
@@ -11,6 +12,20 @@ import com.github.iscle.haven.data.local.database.entity.ShownPhotoEntity
 @Dao
 interface PhotoCacheDao {
     
+    @Transaction
+    suspend fun takeRandomPhoto(cacheKey: String): PhotoCacheEntity? {
+        val photo = getUnshownPhotosByQuery(cacheKey).randomOrNull() ?: return null
+        deletePhoto(photo.id, cacheKey)
+        return photo
+    }
+
+    @Transaction
+    suspend fun replacePhotos(metadata: CacheMetadataEntity, photos: List<PhotoCacheEntity>) {
+        deleteCacheMetadata(metadata.cacheKey)
+        insertCacheMetadata(metadata)
+        insertPhotos(photos)
+    }
+
     // Photo cache operations
     @Query("""
         SELECT * FROM photo_cache 

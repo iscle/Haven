@@ -4,7 +4,6 @@ import com.github.iscle.haven.data.local.HistoryDataSource
 import com.github.iscle.haven.data.local.PhotoCacheDataSource
 import com.github.iscle.haven.data.remote.UnsplashApiService
 import com.github.iscle.haven.data.remote.model.UnsplashPhoto
-import com.github.iscle.haven.data.remote.model.UnsplashSearchResponse
 import com.github.iscle.haven.domain.model.BackgroundImage
 import com.github.iscle.haven.domain.model.PhotoSource
 import com.github.iscle.haven.domain.model.PhotoSourceType
@@ -23,7 +22,7 @@ class UnsplashRepositoryImpl @Inject constructor(
 ) : UnsplashRepositoryInterface {
     companion object {
         private const val MAX_PAGE_RETRIES = 5
-        private const val COLLECTION_PAGE_SIZE = 20
+        private const val PAGE_SIZE = 20
 
         fun collectionCacheKey(collectionId: String): String = "collection:$collectionId"
     }
@@ -97,27 +96,13 @@ class UnsplashRepositoryImpl @Inject constructor(
             return Result.success(cached)
         }
 
-        val info = unsplashApiService.getCollection(collectionId).getOrNull()
-        val totalPhotos = info?.totalPhotos ?: 0
-        val pages = if (totalPhotos > 0) {
-            ((totalPhotos + COLLECTION_PAGE_SIZE - 1) / COLLECTION_PAGE_SIZE).coerceAtMost(50)
-        } else {
-            1
-        }
-
-        repeat(MAX_PAGE_RETRIES) {
-            val page = (1..pages).random()
-            val photos = unsplashApiService
-                .getCollectionPhotos(collectionId, page = page, perPage = COLLECTION_PAGE_SIZE)
-                .getOrNull()
-                ?.filter { it.width > it.height }
-                ?.map(::mapToDomainModel)
-                .orEmpty()
-
-            if (photos.isNotEmpty()) {
-                photoCacheDataSource.cachePhotos(cacheKey, photos)
-                return Result.success(photos.random())
-            }
+        val info = unsplashApiService.getCollection(collectionId)
+            .getOrElse { return Result.failure(it) }
+        val pages = ((info.totalPhotos + PAGE_SIZE - 1) / PAGE_SIZE).coerceIn(1, 50)
+        for (page in (1..pages).shuffled().take(MAX_PAGE_RETRIES)) {
+            val photos = unsplashApiService.getCollectionPhotos(collectionId, page, PAGE_SIZE)
+                .getOrElse { return Result.failure(it) }
+            cacheAndSelect(cacheKey, photos)?.let { return Result.success(it) }
         }
 
         return Result.failure(
@@ -146,92 +131,31 @@ class UnsplashRepositoryImpl @Inject constructor(
     }
 
     private suspend fun fetchAndCachePhotos(query: String): Result<BackgroundImage> {
-        // First, fetch page 1 to get total pages
-        val firstPageResult = unsplashApiService.searchPhotos(query, page = 1, perPage = 1)
-
-        return firstPageResult.fold(
-            onSuccess = { firstPageResponse ->
-                if (firstPageResponse.totalPages == 0) {
-                    Timber.w("Repository: No pages available for query: $query")
-                    return@fold Result.failure(IllegalArgumentException("No photos found for query: $query"))
-                }
-
-                val landscapePhotoResult = fetchLandscapePhotoWithRetry(query, firstPageResponse)
-                landscapePhotoResult.fold(
-                    onSuccess = { photo ->
-                        // Cache all photos from successful response, return random one
-                        photoCacheDataSource.cachePhotos(query, listOf(photo))
-                        Result.success(photo)
-                    },
-                    onFailure = { error ->
-                        Result.failure(error)
-                    }
-                )
-            },
-            onFailure = { error ->
-                Timber.e(error, "Repository: Failed to fetch first page to determine total pages")
-                Result.failure(error)
+        // Use the same page size for pagination metadata and subsequent pages.
+        val firstPage = unsplashApiService.searchPhotos(query, page = 1, perPage = PAGE_SIZE)
+            .getOrElse { return Result.failure(it) }
+        val pages = (1..firstPage.totalPages.coerceIn(1, 50)).shuffled().take(MAX_PAGE_RETRIES)
+        for (page in pages) {
+            val response = if (page == 1) firstPage else {
+                unsplashApiService.searchPhotos(query, page, PAGE_SIZE)
+                    .getOrElse { return Result.failure(it) }
             }
-        )
-    }
-
-    private suspend fun fetchLandscapePhotoWithRetry(
-        query: String,
-        firstPageResponse: UnsplashSearchResponse
-    ): Result<BackgroundImage> {
-        val maxPages = minOf(firstPageResponse.totalPages, 50)
-        val availablePages = (1..maxPages).toList()
-        val triedPages = mutableSetOf<Int>()
-
-        repeat(MAX_PAGE_RETRIES) { attempt ->
-            val remainingPages = availablePages.filter { it !in triedPages }
-            if (remainingPages.isEmpty()) {
-                return Result.failure(IllegalArgumentException("No landscape photos found in any page"))
-            }
-
-            val randomPage = remainingPages.random()
-            triedPages.add(randomPage)
-
-            val pageResult = fetchLandscapePhotoFromPage(query, randomPage)
-            if (pageResult.isSuccess) {
-                return pageResult
-            }
-
-            // Log the failure and continue to next attempt
-            val error = pageResult.exceptionOrNull()
-            Timber.w(error, "Repository: Failed to fetch landscape photo from page $randomPage (attempt ${attempt + 1}/$MAX_PAGE_RETRIES)")
+            cacheAndSelect(query, response.results)?.let { return Result.success(it) }
         }
-
-        return Result.failure(IllegalArgumentException("No landscape photos found after trying $MAX_PAGE_RETRIES pages"))
+        return Result.failure(IllegalStateException("No landscape photos for query: $query"))
     }
 
-    private suspend fun fetchLandscapePhotoFromPage(query: String, page: Int): Result<BackgroundImage> {
-        Timber.d("Repository: Fetching page $page for landscape photos")
-
-        return unsplashApiService.searchPhotos(query, page = page, perPage = 20).fold(
-            onSuccess = { response ->
-                val landscapePhotos = response.results.filter { it.width > it.height }
-
-                if (landscapePhotos.isEmpty()) {
-                    Timber.w("Repository: No landscape photos found on page $page")
-                    Result.failure(IllegalStateException("No landscape photos on page $page"))
-                } else {
-                    val backgroundImages = landscapePhotos.map { mapToDomainModel(it) }
-                    // Cache all photos from this successful page
-                    photoCacheDataSource.cachePhotos(query, backgroundImages)
-
-                    val randomImage = backgroundImages.random()
-                    Timber.d("Repository: Found landscape photo: id=${randomImage.id}")
-                    Result.success(randomImage)
-                }
-            },
-            onFailure = { error ->
-                Timber.e(error, "Repository: Failed to fetch photos from page $page")
-                Result.failure(error)
-            }
-        )
+    /** Cache the complete batch, then consume the selected photo exactly once. */
+    private suspend fun cacheAndSelect(
+        cacheKey: String,
+        photos: List<UnsplashPhoto>
+    ): BackgroundImage? {
+        val images = photos.filter { it.width > it.height }.map(::mapToDomainModel)
+        if (images.isEmpty()) return null
+        photoCacheDataSource.cachePhotos(cacheKey, images)
+        return photoCacheDataSource.getRandomCachedPhoto(cacheKey)
     }
-    
+
     private fun mapToDomainModel(photo: UnsplashPhoto): BackgroundImage {
         return BackgroundImage(
             id = photo.id,

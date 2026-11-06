@@ -65,11 +65,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.imageLoader
-import coil.request.CachePolicy
-import coil.request.ImageRequest
-import coil.request.SuccessResult
 import com.github.iscle.haven.domain.model.AppPreferences
-import com.github.iscle.haven.domain.model.BackgroundImage
 import com.github.iscle.haven.domain.model.HavenNotification
 import com.github.iscle.haven.domain.model.Weather
 import com.github.iscle.haven.presentation.apps.AppDrawerActivity
@@ -133,16 +129,13 @@ fun HomeScreen(
         if (!started) launchAppDrawer()
     }
 
-    // Track the displayed image (only updates when new image is fully loaded)
-    var displayedImage by remember { mutableStateOf<BackgroundImage?>(null) }
-    val newImage = uiState.backgroundImage
-
-    // Initialize displayedImage on first load
-    LaunchedEffect(newImage?.url) {
-        if (newImage != null && displayedImage == null) {
-            displayedImage = newImage
-        }
-    }
+    val loadedBackground = rememberLoadedBackground(
+        image = uiState.backgroundImage,
+        requestId = uiState.backgroundRequestId,
+        imageLoader = imageLoader,
+        onLoaded = viewModel::onBackgroundImageLoaded,
+        onError = viewModel::onBackgroundImageError
+    )
 
     // Night mode follows the 23:00–07:00 window; a tap brings the day layout
     // back briefly so the screen stays usable without leaving ambient mode.
@@ -184,25 +177,6 @@ fun HomeScreen(
                 if (isNight) Modifier.clickable { wakeRequested = true } else Modifier
             )
     ) {
-        // Preload the new image in the background (invisible) and track when it's loaded
-        // Only preload if it's different from the currently displayed image
-        LaunchedEffect(newImage?.url) {
-            if (newImage != null && newImage.url != displayedImage?.url) {
-                val request = ImageRequest.Builder(context)
-                    .data(newImage.url)
-                    .memoryCachePolicy(CachePolicy.ENABLED)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .networkCachePolicy(CachePolicy.ENABLED)
-                    .build()
-
-                val result = imageLoader.execute(request)
-
-                if (result is SuccessResult) {
-                    displayedImage = newImage
-                }
-            }
-        }
-
         // The photo fades down to a trace of itself in night mode.
         val photoAlpha by animateFloatAsState(
             targetValue = if (isNight) 0.16f else 1f,
@@ -212,7 +186,7 @@ fun HomeScreen(
 
         // Background Image with smooth crossfade transition
         AnimatedContent(
-            targetState = displayedImage,
+            targetState = loadedBackground,
             transitionSpec = {
                 fadeIn(animationSpec = tween(1000)) togetherWith
                         fadeOut(animationSpec = tween(1000))
@@ -222,12 +196,7 @@ fun HomeScreen(
         ) { image ->
             if (image != null) {
                 AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(image.url)
-                        .memoryCachePolicy(CachePolicy.ENABLED)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .networkCachePolicy(CachePolicy.ENABLED)
-                        .build(),
+                    model = image.drawable,
                     imageLoader = imageLoader,
                     contentDescription = "Background",
                     modifier = Modifier.fillMaxSize(),
@@ -328,7 +297,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    val credit = displayedImage
+                    val credit = loadedBackground?.image
                     if (credit != null && preferences.showPhotographerCredit) {
                         Text(
                             text = "${credit.photographer} · Unsplash",

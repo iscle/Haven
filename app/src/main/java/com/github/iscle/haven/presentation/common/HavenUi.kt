@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.iscle.haven.ui.theme.HavenAccent
@@ -203,7 +204,7 @@ fun HavenSwitch(
     ) {
         Box(
             modifier = Modifier
-                .offset(x = thumbOffset)
+                .offset { IntOffset(thumbOffset.roundToPx(), 0) }
                 .size(28.dp)
                 .clip(CircleShape)
                 .background(thumbColor)

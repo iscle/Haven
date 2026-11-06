@@ -1,9 +1,9 @@
 package com.github.iscle.haven.domain.usecase
 
 import com.github.iscle.haven.domain.model.BackgroundImage
-import com.github.iscle.haven.domain.model.PhotoSourceType
 import com.github.iscle.haven.domain.repository.PreferencesRepository
 import com.github.iscle.haven.domain.repository.UnsplashRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject
@@ -31,7 +31,13 @@ class GetRandomBackgroundImageUseCase @Inject constructor(
             for (source in sources.shuffled()) {
                 attempt = unsplashRepository.getRandomPhotoForSource(source)
                 if (attempt.isSuccess) {
-                    preferencesRepository.setLastPhotoSourceId(source.id)
+                    try {
+                        preferencesRepository.setLastPhotoSourceId(source.id)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        Timber.w(error, "Could not save last photo source")
+                    }
                     break
                 }
                 Timber.w(
@@ -42,15 +48,16 @@ class GetRandomBackgroundImageUseCase @Inject constructor(
             attempt
         }
 
-        return result.mapCatching { backgroundImage ->
-            Timber.d("UseCase: Successfully retrieved background image: id=${backgroundImage.id}, photographer=${backgroundImage.photographer}")
-
-            // Device photos are already on the device; everything else is worth keeping.
-            unsplashRepository.addToHistory(backgroundImage)
-
-            backgroundImage
-        }.onFailure { error ->
-            Timber.e(error, "UseCase: Failed to get random background image")
+        result.getOrNull()?.let { image ->
+            try {
+                unsplashRepository.addToHistory(image)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // History bookkeeping must not prevent an otherwise valid photo loading.
+                Timber.w(error, "Could not save wallpaper history")
+            }
         }
+        return result
     }
 }

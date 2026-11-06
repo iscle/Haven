@@ -1,5 +1,7 @@
 package com.github.iscle.haven.di
 
+import com.github.iscle.haven.data.remote.UnsplashTransport
+import com.github.iscle.haven.data.remote.WebViewUnsplashTransport
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -16,10 +18,6 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import javax.inject.Qualifier
 import javax.inject.Singleton
-
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class UnsplashClient
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -42,22 +40,7 @@ object NetworkModule {
     }
 
     @Provides
-    @Singleton
-    @UnsplashClient
-    fun provideUnsplashHttpClient(json: Json): HttpClient {
-        return HttpClient(Android) {
-            install(ContentNegotiation) {
-                json(json)
-            }
-            install(Logging) {
-                logger = Logger.DEFAULT
-                level = LogLevel.INFO
-            }
-            defaultRequest {
-                url("https://unsplash.com/")
-            }
-        }
-    }
+    fun provideUnsplashTransport(transport: WebViewUnsplashTransport): UnsplashTransport = transport
 
     @Provides
     @Singleton
